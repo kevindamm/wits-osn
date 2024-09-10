@@ -27,57 +27,64 @@ import (
 	"log"
 )
 
-// Only needs to be called once at table setup
-func CreateTables(db WitsDB) error {
-	witsdb, ok := db.(*witsdb)
-	if !ok {
-		return errors.New("could not convert WitsDB to internal *witsdb")
+// Only needs to be called once at table setup.  Also closes the database.
+func CreateTablesAndClose(db_path string) error {
+	witsdb, err := open_database(db_path)
+	if err != nil {
+		return errors.New("could not open WitsDB database")
 	}
+	defer witsdb.Close()
+
 	for _, statement := range []string{
 		// Enumerative relation between a map's name and its integer ID.
 		`CREATE TABLE "maps" (
       "map_id"        INTEGER PRIMARY KEY,
-      "map_name"      TEXT NOT NULL,
-      "map_filename"  VARCHAR(127) NOT NULL,
+      "map_name"      VARCHAR(127) NOT NULL,
+      "map_theme"     INTEGER, -- matches RaceEnum
       "player_count"  INTEGER CHECK(player_count == 2 OR player_count == 4),
-      "deprecated"    BOOLEAN,
 
-      UNIQUE (map_filename) ON CONFLICT IGNORE
+      "map_filename"  TEXT NOT NULL,
+      "map_json"      TEXT,
+      "width"         INTEGER,
+      "height"        INTEGER,
+
+      "deprecated"    BOOLEAN DEFAULT FALSE
     ) WITHOUT ROWID;`,
 
+		`INSERT INTO maps VALUES (0, "MAP_UNKNOWN", 0, NULL, "", NULL, 0, 0, true);`,
 		`INSERT INTO maps 
-      (map_id, map_name, map_filename, player_count, deprecated)
+      (map_id, map_name, player_count, map_filename, map_theme, width, height)
     VALUES
-      (0,  "MAP_UNKNOWN", "", 2, true),
-      (1,  "Machination", "machination", 4, false),
-      (2,  "Foundry (v1)", "foundry-v1", 2, true),
-      (3,  "Foundry", "foundry-v2", 2, false),
-      (4,  "Glitch", "glitch", 2, false),
-      (5,  "Candy Core Mine", "candy-core-mine", 4, false),
-      (6,  "Sweetie Plains", "sweetie-plains", 2, false),
-      (7,  "Peekaboo", "peekaboo", 2, false),
-      (8,  "Blitz Beach", "blitz-beach", 4, false),
-      (9,  "Long Nine", "long-nine", 2, false),
-      (10, "Sharkfood Island", "sharkfood-island", 2, false),
-      (11, "Acrospire", "acrospire", 4, false),
-      (12, "Thorn Gulley", "thorn-gulley", 2, false),
-      (13, "Reaper", "reaper", 2, false),
-      (14, "Skull Duggery", "skull-duggery", 2, false),
-      (15, "War Garden", "war-garden", 2, false),
-      (16, "Sweet Tooth", "sweet-tooth", 2, false),
-      (17, "Sugar Rock", "sugar-rock", 4, false),
-      (18, "Mechanism", "mechanism", 4, false);`,
+      (1,  "Machination",      4, "machination",       1, 13, 13),
+      (2,  "Foundry (v1)",     2, "foundry",           1, 13, 12),
+      (3,  "Foundry",          2, "foundry",           1, 13, 12),
+      (4,  "Glitch",           2, "glitch",            1, 11, 11),
+      (5,  "Candy Core Mine",  4, "candy-core-mine",   2, 13, 13),
+      (6,  "Sweetie Plains",   2, "sweetie-plains",    2, 13, 13),
+      (7,  "Peek-a-boo",       2, "peekaboo",          2, 13, 10),
+      (8,  "Blitz Beach",      4, "blitz-beach",       3, 13, 11),
+      (9,  "Long Nine",        2, "long-nine",         3, 13, 14),
+      (10, "Sharkfood Island", 2, "sharkfood-island",  3, 13, 10),
+      (11, "Acrospire",        4, "acrospire",         4, 13, 13),
+      (12, "Thorn Gulley",     2, "thorn-gulley",      4, 13, 12),
+      (13, "Reaper",           2, "reaper",            4, 13, 12),
+      (14, "Skull Duggery",    2, "skull-duggery",     3, 13, 10),
+      (15, "War Garden",       2, "war-garden",        4, 13, 12),
+      (16, "Sweet Tooth",      2, "sweet-tooth",       2, 13, 10),
+      (17, "Sugar Rock",       4, "sugar-rock",        2, 13, 13),
+      (18, "Mechanism",        4, "mechanism",         1, 13, 13);`,
+		`UPDATE maps set deprecated = true WHERE map_id = 2;`,
 
 		// Enumerative relation for the different races.
 		// Affects unit sprites and available hero unit.
 		`CREATE TABLE "races" (
-      "race_id" INTEGER PRIMARY KEY,
-      "race_name" TEXT NOT NULL,
+      "race_id"    INTEGER PRIMARY KEY,
+      "race_name"  TEXT NOT NULL,
 
       UNIQUE (race_name) ON CONFLICT IGNORE
     ) WITHOUT ROWID;`,
 
-		`INSERT INTO races (race_id, race_name) VALUES
+		`INSERT INTO races VALUES
       (0, "UNKNOWN"),
       (1, "Feedback"),
       (2, "Adorables"),
@@ -87,13 +94,13 @@ func CreateTables(db WitsDB) error {
 		// Enumerative relation for the different ranked leagues.
 		// Players may be promoted or demoted based on win/loss records.
 		`CREATE TABLE "leagues" (
-      "league_id" INTEGER PRIMARY KEY,
-      "league_name" TEXT NOT NULL,
+      "league_id"    INTEGER PRIMARY KEY,
+      "league_name"  TEXT NOT NULL,
 
       UNIQUE (league_name) ON CONFLICT IGNORE
     ) WITHOUT ROWID;`,
 
-		`INSERT INTO leagues (league_id, league_name) VALUES
+		`INSERT INTO leagues VALUES
       (0, "UNKNOWN"),
       (1, "Fluffy"),
       (2, "Clever"),
@@ -105,12 +112,22 @@ func CreateTables(db WitsDB) error {
 		// used for foreign key relations in replay-related tables.
 		`CREATE TABLE "players" (
       "id"    INTEGER PRIMARY KEY,
-      "guid"  TEXT -- NOT NULL UNIQUE,
       "name"  TEXT NOT NULL
     ) WITHOUT ROWID;`,
 
-		`INSERT INTO players (id, guid, name) VALUES
-      (0, "", "UNKNOWN");`,
+		// We don't always know the GC:ID (it is revealed in replays),
+		// having it as a separate table affords
+		// both optional and non-null uniqueness.
+		`CREATE TABLE "player_gcid" (
+      "player_id"  INTEGER PRIMARY KEY,
+      "gcid"       TEXT NOT NULL UNIQUE,
+
+      FOREIGN KEY (player_id)
+        REFERENCES players (id)
+        ON DELETE CASCADE ON UPDATE NO ACTION
+    ) WITHOUT ROWID;`,
+
+		`INSERT INTO players (id, name) VALUES (0, "UNKNOWN");`,
 
 		// The `matches` metadata relates to an instance of a game between two
 		// players.  This differs from the serialized replays that relate entirely
@@ -124,14 +141,16 @@ func CreateTables(db WitsDB) error {
       "start_time"   TIMESTAMP, -- time at creation, UTC
 
       "map_id"       INTEGER,   -- MapEnum
-      "map_theme"    INTEGER,   -- matches RaceEnum
       "turn_count"   INTEGER,   -- number of turns (= one ply) for the match
 
       "version"      INTEGER,   -- the runtime version for this match
       "osn_status"   INTEGER,   -- this match's fetched -> parsed -> converted state
 
-      FOREIGN KEY (map_id) REFERENCES maps (map_id)
-        ON DELETE CASCADE ON UPDATE NO ACTION
+      FOREIGN KEY (map_id)
+        REFERENCES maps (map_id)
+        ON DELETE CASCADE ON UPDATE NO ACTION,
+
+      UNIQUE (match_hash) ON CONFLICT FAIL
     );`,
 
 		// Relation for which players are participating in which matches,
@@ -143,10 +162,14 @@ func CreateTables(db WitsDB) error {
       "player_id" INTEGER NOT NULL,
       "turn_order" INTEGER CHECK(turn_order > 0 AND turn_order <= 2),
 
-      FOREIGN KEY (match_id) REFERENCES matches (rowid)
-        ON DELETE CASCADE ON UPDATE NO ACTION,
-      FOREIGN KEY (player_id) REFERENCES players (rowid)
-        ON DELETE CASCADE ON UPDATE NO ACTION,
+      FOREIGN KEY (match_id)
+        REFERENCES matches (rowid)
+        ON DELETE CASCADE
+        ON UPDATE NO ACTION,
+      FOREIGN KEY (player_id)
+        REFERENCES players (rowid)
+        ON DELETE CASCADE
+        ON UPDATE NO ACTION,
 
       UNIQUE (match_id, turn_order) ON CONFLICT FAIL,
       UNIQUE (match_id, player_id) ON CONFLICT IGNORE
@@ -165,11 +188,14 @@ func CreateTables(db WitsDB) error {
 
       "prev_points"   INTEGER DEFAULT 0,
 
-      FOREIGN KEY (after) REFERENCES roles (rowid)
+      FOREIGN KEY (after)
+        REFERENCES roles (rowid)
         ON DELETE CASCADE ON UPDATE NO ACTION,
-      FOREIGN KEY (until) REFERENCES roles (rowid)
+      FOREIGN KEY (until)
+        REFERENCES roles (rowid)
         ON DELETE CASCADE ON UPDATE NO ACTION,
-      FOREIGN KEY (player_league) REFERENCES leagues (league_id)
+      FOREIGN KEY (player_league)
+        REFERENCES leagues (league_id)
         ON DELETE CASCADE ON UPDATE NO ACTION
     );`,
 	} {

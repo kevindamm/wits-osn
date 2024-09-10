@@ -1,72 +1,68 @@
 // Copyright (c) 2024 Kevin Damm
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 //
-// github:kevindamm/wits-osn/replay.go
+// github:kevindamm/wits-osn
 
 package osn
 
-// The (unaltered) representation of match-related metadata from OSN.
-type LegacyReplayMetadata struct {
-	Index       string `json:"id"`            // integer index into sequential games
-	GameID      string `json:"gameid"`        // hash of game creation
-	GameType    string `json:"gametype"`      // solo "2" vs duo "4"
-	LeagueMatch string `json:"isleaguematch"` // "1" if true
-	Created     string `json:"created"`       // 2012-08-05 14:33:21
+import "encoding/json"
 
-	MapID   string `json:"mapid"`      // indexed, e.g. "4"
-	MapName string `json:"map_title"`  // display name, e.g. "Glitch"
-	RaceID  string `json:"map_raceid"` // enumeration, e.g. "1"
+// This is the format as returned by the web service for a single game replay.
+//
+// It is a shallow wrapper around the actual game replay, containing four
+// dictionary entries, one of which is a string representation of the game.
+type WireFormat struct {
+	Wrapper outer `json:"viewResponse"` // Path reference of an `.hxm` file.
+}
 
-	TurnCount   string `json:"turn_count"` // integer "34"
-	ViewCount   string `json:"viewcount"`  // integer "116"
-	LikeCount   string `json:"like_count"` // integer "0"
-	WitsVersion string `json:"engine"`     // integer #=< 1063, "1000" is v1
-	WitsSeason  string `json:"season"`     // integer "1"
+type outer struct {
+	Wrapper string `json:"gameState"` // Wrapper around the turn's frames.
+	Found   bool   `json:"foundRoom"` // Always true - a game lobby was found.
+	RoomID  string `json:"room"`      // The game (and game replay) identifier.
+}
 
-	Player1_ID     string `json:"p1_playerid"`   // integer "1",
-	Player1_Name   string `json:"p1_playername"` // utf8 name "Syvan",
-	Player1_League string `json:"p1_leagueid"`   // OsnLeagueEnum
-	Player1_Race   string `json:"p1_raceid"`     // OsnRaceEnum
-	Player1_Wins   string `json:"p1_winner"`     // boolish "1",
-	Player1_BaseHP string `json:"p1_basehp"`     // #=< "5",
+type inner struct {
+	Wrapper string `json:"gameState"`
+}
 
-	Player2_ID     string `json:"p2_playerid"`   //: integer "2",
-	Player2_Name   string `json:"p2_playername"` //: utf8 name "Alvendor",
-	Player2_League string `json:"p2_leagueid"`   //: OsnLeagueEnum
-	Player2_Race   string `json:"p2_raceid"`     //: OsnRaceEnum
-	Player2_Wins   string `json:"p2_winner"`     //: boolish "0",
-	Player2_BaseHP string `json:"p2_basehp"`     //: #=< "0",
+func ParseReplay(filedata []byte) (string, []byte, error) {
+	var on_wire WireFormat
+	var gamestate inner
+	var replay LegacyMatchReplay
+	err := json.Unmarshal(filedata, &on_wire)
+	if err != nil {
+		return "", []byte{}, err
+	}
+	err = json.Unmarshal([]byte(on_wire.Wrapper.Wrapper), &gamestate)
+	if err != nil {
+		return on_wire.Wrapper.RoomID, []byte{}, err
+	}
+	err = json.Unmarshal([]byte(gamestate.Wrapper), &replay)
+	if err != nil {
 
-	Player3_ID     string `json:"p3_playerid,omitempty"`   //: may be null
-	Player3_Name   string `json:"p3_playername,omitempty"` //: may be null
-	Player3_League string `json:"p3_leagueid,omitempty"`   //: may be null
-	Player3_Race   string `json:"p3_raceid,omitempty"`     //: may be null
-	Player3_Wins   string `json:"p3_winner,omitempty"`     //: may be null
-	Player3_BaseHP string `json:"p3_basehp,omitempty"`     //: may be null
-	Player4_ID     string `json:"p4_playerid,omitempty"`   //: may be null
-	Player4_Name   string `json:"p4_playername,omitempty"` //: may be null
-	Player4_League string `json:"p4_leagueid,omitempty"`   //: may be null
-	Player4_Race   string `json:"p4_raceid,omitempty"`     //: may be null
-	Player4_Wins   string `json:"p4_winner,omitempty"`     //: may be null
-	Player4_BaseHP string `json:"p4_basehp,omitempty"`     //: may be null
-
-	FirstPlayer string `json:"first_playerid"` // "2" matches playerid above
+	}
+	bytes, err := json.Marshal(replay)
+	return on_wire.Wrapper.RoomID, bytes, err
 }
 
 // The slightly-flattened complete representation of a match replay from OSN.
 type LegacyMatchReplay struct {
-	OsnGameID string `json:"game_id"`
-	MapName   string `json:"map_name"`
-	MapTheme  string `json:"map_theme"`
+	OsnMatchID string `json:"game_id"`
 }

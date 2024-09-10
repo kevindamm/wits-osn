@@ -33,21 +33,25 @@ import (
 )
 
 func TestDB(t *testing.T) {
-	file, err := os.CreateTemp("", "wits-*.db")
+	file, err := os.CreateTemp("", "osnwits-*.db")
 	if err != nil {
 		t.Errorf("error creating temporary file for DB: %s\n", err)
 	}
 	file.Close()
 
-	create_tables := true
-	var db main.WitsDB = main.OpenWitsDB(file.Name(), create_tables)
-	defer db.Close()
+	// will also create the database that doesn't exist yet
+	err = main.CreateTablesAndClose(file.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Closing and re-opening the database should still include the tables above.
+	db := main.OpenWitsDB(file.Name())
 
 	maps, err := db.Maps()
 	if err != nil {
 		t.Errorf("MapNames() error: %s\n", err)
 	}
-
 	if len(maps) != 17 {
 		t.Errorf("retrieved unexpected number of maps %d", len(maps))
 		t.Log(maps)
@@ -66,6 +70,46 @@ func TestDB(t *testing.T) {
 
 	check_player(t, db, 1, "First")
 	check_player(t, db, 2, "2nd")
+
+	match := osn.LegacyReplayMetadata{
+		Index:       "5",
+		GameID:      "ag5vdXR3aXR0ZXJzZ2FtZXIQCxIIR2FtZVJvb20Y9-5HDA",
+		GameType:    "2",
+		LeagueMatch: "1",
+		Created:     "",
+		Season:      "1",
+
+		WitsVersion: "1000",
+		MapID:       "7",
+		MapName:     "Peekaboo",
+		MapTheme:    "2",
+
+		TurnCount: "25",
+		ViewCount: "35",
+		LikeCount: "1",
+
+		Player1_ID:     "2",
+		Player1_Name:   "Alvendor",
+		Player1_League: "5",
+		Player1_Race:   "3",
+		Player1_Wins:   "0",
+		Player1_BaseHP: "0",
+
+		Player2_ID:     "3",
+		Player2_Name:   "Lenoxe",
+		Player2_League: "5",
+		Player2_Race:   "3",
+		Player2_Wins:   "1",
+		Player2_BaseHP: "5",
+
+		FirstPlayer: "3",
+	}
+	err = db.InsertMatch(match)
+	if err != nil {
+		t.Errorf("error when inserting match metadata:\n%s", err)
+	}
+
+	check_match(t, db, match)
 }
 
 func check_player(t *testing.T, db main.WitsDB, id int64, name string) {
@@ -84,4 +128,8 @@ func check_player(t *testing.T, db main.WitsDB, id int64, name string) {
 	if player.ID.RowID != id {
 		t.Errorf("incorrect ID for player (name=First): %d", player.ID.RowID)
 	}
+}
+
+func check_match(t *testing.T, db main.WitsDB, match osn.LegacyReplayMetadata) {
+	// TODO
 }

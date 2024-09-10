@@ -35,7 +35,7 @@ import (
 //
 // DB includes match metadata, map identities, player history and replay index.
 type WitsDB interface {
-	Close()
+	Close() // also closes the SqlDB
 
 	InsertPlayer(osn.Player) error
 	InsertMatch(osn.LegacyReplayMetadata) error
@@ -52,33 +52,95 @@ func assertNil(err error) {
 	}
 }
 
-func OpenWitsDB(filepath string, create_tables bool) WitsDB {
+// Opens a Sqlite db at indicated path and prepares queries.
+// Does not create tables, only prepares the connection and statements.
+//
+// Asserts db exists and basic queries can be constructed.
+// LOG(FATAL) on any error but database is not modified.
+func OpenWitsDB(filepath string) WitsDB {
+	witsdb, err := open_database(filepath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err = witsdb.PrepareQueries(); err != nil {
+		log.Fatal(err)
+	}
+	return WitsDB(witsdb)
+}
+
+// Opens a connection to the database but does not prepare any queries.
+//
+// Useful for getting a connection to create the required tables,  Callers from
+// other packages should use OpenWitsDB() or CreateTables(), & WitsDB interface.
+func open_database(filepath string) (*witsdb, error) {
 	db, err := sql.Open("sqlite3", filepath)
-	assertNil(err)
+	if err != nil {
+		return nil, err
+	}
 
 	witsdb := new(witsdb)
 	witsdb.sqldb = db
+	return witsdb, nil
+}
 
-	if create_tables {
-		CreateTables(witsdb)
-	}
+// Prepares [*sql.Stmt] statements for this database interface.
+// (Automatically done if opening the database with [OpenWitsDB()] constructor.)
+func (witsdb *witsdb) PrepareQueries() error {
+	var err error = nil
+	db := witsdb.sqldb
 
 	witsdb.insertPlayer, err = db.Prepare(`INSERT INTO
-	  players (id, guid, name) VALUES (?, ?, ?)`)
-	assertNil(err)
+	  players (id, name)
+		VALUES (?, ?)`)
+	if err != nil {
+		return err
+	}
 
-	witsdb.selectEnums, err = db.Prepare(`SELECT * FROM maps WHERE NOT deprecated`)
-	assertNil(err)
+	witsdb.insertMatch, err = db.Prepare(`INSERT INTO
+		matches (rowid, match_hash, competitive, season, start_time,
+		  map_id, turn_count, version, osn_status)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
 
-	witsdb.selectPlayerByID, err = db.Prepare(`SELECT * FROM players
+	witsdb.insertPlayerRole, err = db.Prepare(`INSERT INTO
+	  roles (match_id, player_id, turn_order)
+		VALUES (?, ?, ?);`)
+	if err != nil {
+		return err
+	}
+
+	witsdb.selectMaps, err = db.Prepare(`SELECT
+	  map_id, map_name, map_filename, player_count
+	  FROM maps
+		WHERE NOT deprecated`)
+	if err != nil {
+		return err
+	}
+
+	witsdb.selectPlayerByID, err = db.Prepare(`SELECT *
+	  FROM players
 	  WHERE id = ?;`)
-	assertNil(err)
+	if err != nil {
+		return err
+	}
 
-	witsdb.selectPlayerByName, err = db.Prepare(`SELECT * FROM players
+	witsdb.selectPlayerByName, err = db.Prepare(`SELECT *
+	  FROM players
 	  WHERE name = ?;`)
-	assertNil(err)
+	if err != nil {
+		return err
+	}
 
-	return witsdb
+	witsdb.selectMatches, err = db.Prepare(`SELECT *
+		FROM matches
+		WHERE match_hash = ?;`)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 type witsdb struct {
@@ -88,7 +150,7 @@ type witsdb struct {
 	insertMatch      *sql.Stmt
 	insertPlayerRole *sql.Stmt
 
-	selectEnums        *sql.Stmt
+	selectMaps         *sql.Stmt
 	selectPlayerByID   *sql.Stmt
 	selectPlayerByName *sql.Stmt
 	selectMatches      *sql.Stmt
@@ -100,7 +162,7 @@ func (db *witsdb) Close() {
 
 func (db *witsdb) InsertPlayer(player osn.Player) error {
 	_, err := db.insertPlayer.Exec(
-		player.ID.RowID, player.ID.GCID, player.Name)
+		player.ID.RowID, player.Name)
 	return err
 }
 
@@ -116,16 +178,16 @@ func (db *witsdb) InsertMatch(osn.LegacyReplayMetadata) error {
 
 func (db *witsdb) Maps() ([]osn.Map, error) {
 	maps := make([]osn.Map, 0)
-	rows, err := db.selectEnums.Query()
-	if err != nil {
+	if rows, err := db.selectMaps.Query(); err != nil {
 		return maps, err
-	}
-	defer rows.Close()
+	} else {
+		defer rows.Close()
 
-	mapobj := osn.Map{}
-	for rows.Next() {
-		rows.Scan(&mapobj.MapID, &mapobj.Name)
-		maps = append(maps, mapobj)
+		mapobj := osn.Map{}
+		for rows.Next() {
+			rows.Scan(&mapobj.MapID, &mapobj.Name)
+			maps = append(maps, mapobj)
+		}
 	}
 
 	return maps, nil
@@ -141,7 +203,7 @@ func (db *witsdb) Player(id int64) (osn.Player, error) {
 		return player, fmt.Errorf("no player with ID %d", id)
 	}
 
-	err = row.Scan(&player.ID.RowID, &player.ID.GCID, &player.Name)
+	err = row.Scan(&player.ID.RowID, &player.Name)
 	if err != nil {
 		return player, err
 	}
@@ -158,7 +220,7 @@ func (db *witsdb) PlayerByName(name string) (osn.Player, error) {
 		return player, fmt.Errorf("no player with name %s", name)
 	}
 
-	err = row.Scan(&player.ID.RowID, &player.ID.GCID, &player.Name)
+	err = row.Scan(&player.ID.RowID, &player.Name)
 	if err != nil {
 		return player, err
 	}
