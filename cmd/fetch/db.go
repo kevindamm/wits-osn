@@ -38,12 +38,17 @@ type WitsDB interface {
 	Close() // also closes the SqlDB
 
 	InsertPlayer(osn.Player) error
-	InsertMatch(osn.LegacyReplayMetadata) error
-	//InsertStanding(osn.PlayerStanding) error
+	InsertMatch(osn.LegacyMatch) error
+	InsertStanding(osn.PlayerStanding) error
 
-	Maps() ([]osn.Map, error)
-	Player(id int64) (osn.Player, error)
+	AllMaps() ([]osn.Map, error)
+	Map(id int) (osn.Map, error)
+	MapByName(name string) (osn.Map, error)
+
+	Player(id int) (osn.Player, error)
 	PlayerByName(name string) (osn.Player, error)
+
+	Match(id string) (osn.LegacyMatch, error)
 }
 
 func assertNil(err error) {
@@ -146,9 +151,14 @@ func (witsdb *witsdb) PrepareQueries() error {
 type witsdb struct {
 	sqldb *sql.DB
 
-	insertPlayer     *sql.Stmt
-	insertMatch      *sql.Stmt
-	insertPlayerRole *sql.Stmt
+	cachedMaps    map[int]osn.Map
+	cachedPlayers map[int]osn.Player
+
+	insertPlayer       *sql.Stmt
+	insertMatch        *sql.Stmt
+	insertPlayerRole   *sql.Stmt
+	insertStanding     *sql.Stmt
+	updatePrevStanding *sql.Stmt
 
 	selectMaps         *sql.Stmt
 	selectPlayerByID   *sql.Stmt
@@ -160,41 +170,8 @@ func (db *witsdb) Close() {
 	db.sqldb.Close()
 }
 
-func (db *witsdb) InsertPlayer(player osn.Player) error {
-	_, err := db.insertPlayer.Exec(
-		player.ID.RowID, player.Name)
-	return err
-}
-
-func (db *witsdb) InsertMatch(osn.LegacyReplayMetadata) error {
-	// TODO
-
-	return nil
-}
-
-//func (db *witsdb) AddReplay(osn.PlayerStanding) error {
-//	return nil
-//}
-
-func (db *witsdb) Maps() ([]osn.Map, error) {
-	maps := make([]osn.Map, 0)
-	if rows, err := db.selectMaps.Query(); err != nil {
-		return maps, err
-	} else {
-		defer rows.Close()
-
-		mapobj := osn.Map{}
-		for rows.Next() {
-			rows.Scan(&mapobj.MapID, &mapobj.Name)
-			maps = append(maps, mapobj)
-		}
-	}
-
-	return maps, nil
-}
-
-func (db *witsdb) Player(id int64) (osn.Player, error) {
-	player := osn.UnknownPlayer()
+func (db *witsdb) Player(id int) (osn.Player, error) {
+	player := osn.UNKNOWN_PLAYER
 	row, err := db.selectPlayerByID.Query(id)
 	if err != nil {
 		return player, err
@@ -211,7 +188,7 @@ func (db *witsdb) Player(id int64) (osn.Player, error) {
 }
 
 func (db *witsdb) PlayerByName(name string) (osn.Player, error) {
-	player := osn.UnknownPlayer()
+	player := osn.UNKNOWN_PLAYER
 	row, err := db.selectPlayerByName.Query(name)
 	if err != nil {
 		return player, err
@@ -227,6 +204,82 @@ func (db *witsdb) PlayerByName(name string) (osn.Player, error) {
 	return player, nil
 }
 
+func (db *witsdb) InsertPlayer(player osn.Player) error {
+	if _, ok := db.cachedPlayers[player.ID.RowID]; ok {
+		return nil
+	}
+
+	_, err := db.insertPlayer.Exec(player.ID.RowID, player.Name)
+	if err != nil {
+		db.cachedPlayers[player.ID.RowID] = player
+	}
+	return err
+}
+
+func (db *witsdb) AllMaps() ([]osn.Map, error) {
+	maps := make([]osn.Map, 0)
+	if rows, err := db.selectMaps.Query(); err != nil {
+		return maps, err
+	} else {
+		defer rows.Close()
+
+		mapobj := osn.Map{}
+		for rows.Next() {
+			rows.Scan(&mapobj.MapID, &mapobj.Name)
+			maps = append(maps, mapobj)
+		}
+	}
+
+	return maps, nil
+}
+
+func (db *witsdb) Map(id int) (osn.Map, error) {
+	if len(db.cachedMaps) == 0 {
+		if err := db.cachemaps(); err != nil {
+			return osn.UNKNOWN_MAP, err
+		}
+	}
+
+	mapobj, found := db.cachedMaps[id]
+	if !found {
+		return osn.UNKNOWN_MAP, fmt.Errorf("unrecognized map ID %d", id)
+	}
+	return mapobj, nil
+}
+
+func (db *witsdb) MapByName(name string) (osn.Map, error) {
+	if len(db.cachedMaps) == 0 {
+		if err := db.cachemaps(); err != nil {
+			return osn.UNKNOWN_MAP, err
+		}
+	}
+	for _, mapobj := range db.cachedMaps {
+		if mapobj.Name == name {
+			return mapobj, nil
+		}
+	}
+
+	return osn.UNKNOWN_MAP, fmt.Errorf("unknown map named %s", name)
+}
+
+func (db *witsdb) cachemaps() error {
+	maps, err := db.AllMaps()
+	db.cachedMaps = make(map[int]osn.Map)
+	if err != nil {
+		return err
+	}
+	for _, mapobj := range maps {
+		db.cachedMaps[int(mapobj.MapID)] = mapobj
+	}
+	return nil
+}
+
+func (db *witsdb) Match(id string) (osn.LegacyMatch, error) {
+	match := osn.UNKNOWN_MATCH
+
+	return match, nil
+}
+
 func exec(db *sql.DB, query string) error {
 	stmt, err := db.Prepare(query)
 	if err != nil {
@@ -237,5 +290,16 @@ func exec(db *sql.DB, query string) error {
 		return err
 	}
 
+	return nil
+}
+
+func (db *witsdb) InsertMatch(osn.LegacyMatch) error {
+	// TODO
+
+	return nil
+}
+
+func (db *witsdb) InsertStanding(osn.PlayerStanding) error {
+	//  TODO
 	return nil
 }

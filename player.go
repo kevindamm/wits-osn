@@ -27,18 +27,23 @@ type Player struct {
 	Name string
 }
 
+type PlayerRole struct {
+	Player
+	TurnOrder  int
+	RankBefore PlayerStanding
+	RankAfter  PlayerStanding
+}
+
 // Represents both (or either of) the internal identity and the player's GCID.
 // A zero value for either one will indicate missing or unknown value.
 type PlayerID struct {
-	RowID int64
+	RowID int
 	GCID  string
 }
 
-func UnknownPlayer() Player {
-	return Player{
-		ID:   PlayerID{RowID: 0, GCID: ""},
-		Name: "",
-	}
+var UNKNOWN_PLAYER Player = Player{
+	ID:   PlayerID{RowID: 0, GCID: ""},
+	Name: "",
 }
 
 // An ELO-like measurement and a current league + standings.
@@ -61,4 +66,6 @@ const (
 	LEAGUE_SUPERTITAN LeagueEnum = 5
 )
 
+// The player's rank within their current group.
+//
 type LeagueRank uint8

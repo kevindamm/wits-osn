@@ -18,31 +18,36 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-// github:kevindamm/wits-osn/map.go
+// github:kevindamm/wits-osn/units.go
 
 package osn
 
-// OSN map representation, identifies the layout and placement of initial play.
-type Map struct {
-	MapID       int
-	Name        string
-	PlayerCount int // a player count of 0 for a deprecated map
+import "encoding/json"
 
-	MapDetails
+// OSN enumeration of the different squads a player can choose from.
+type UnitRaceEnum byte
+
+const (
+	RACE_UNKNOWN UnitRaceEnum = iota
+	RACE_FEEDBACK
+	RACE_ADORABLES
+	RACE_SCALLYWAGS
+	RACE_VEGGIENAUTS
+)
+
+func (race UnitRaceEnum) String() string {
+	if race > RACE_VEGGIENAUTS {
+		race = RACE_UNKNOWN
+	}
+	return []string{
+		"UNKNOWN",
+		"FEEDBACK",
+		"ADORABLES",
+		"SCALLYWAGS",
+		"VEGGIENAUTS",
+	}[int(race)]
 }
 
-type MapDetails struct {
-	Filename string       `json:"-"`
-	Theme    UnitRaceEnum `json:"map_theme"`
-	Terrain  []byte       `json:"terrain,omitempty"`
-	Units    []byte       `json:"units,omitempty"`
-	Width    int          `json:"columns"`
-	Height   int          `json:"rows"`
-}
-
-// Sentinel representation for an unknown map (e.g., not loaded or just created)
-var UNKNOWN_MAP Map
-
-func init() {
-	UNKNOWN_MAP = Map{0, "UNKNOWN", 0, MapDetails{Filename: ""}}
+func (race UnitRaceEnum) MarshalJSON() ([]byte, error) {
+	return json.Marshal(int(race))
 }

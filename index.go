@@ -28,11 +28,13 @@ type LegacyReplayMetadata struct {
 	Created     string `json:"created"`       // 2012-08-05 14:33:21
 	Season      string `json:"season"`        // integer "1"
 
+	// Runtime is parameterized by engine version and map definition.
 	WitsVersion string `json:"engine"`     // integer #=< 1063, "1000" is v1
 	MapID       string `json:"mapid"`      // indexed, e.g. "4"
 	MapName     string `json:"map_title"`  // display name, e.g. "Glitch"
 	MapTheme    string `json:"map_raceid"` // enumeration, e.g. "1"
 
+	// These aren't persisted in the database but appear in the OSN index.
 	TurnCount string `json:"turn_count"` // integer "34"
 	ViewCount string `json:"viewcount"`  // integer "116"
 	LikeCount string `json:"like_count"` // integer "0"
@@ -57,6 +59,7 @@ type LegacyReplayMetadata struct {
 	Player3_Race   string `json:"p3_raceid,omitempty"`     //: may be null
 	Player3_Wins   string `json:"p3_winner,omitempty"`     //: may be null
 	Player3_BaseHP string `json:"p3_basehp,omitempty"`     //: may be null
+
 	Player4_ID     string `json:"p4_playerid,omitempty"`   //: may be null
 	Player4_Name   string `json:"p4_playername,omitempty"` //: may be null
 	Player4_League string `json:"p4_leagueid,omitempty"`   //: may be null
@@ -64,5 +67,17 @@ type LegacyReplayMetadata struct {
 	Player4_Wins   string `json:"p4_winner,omitempty"`     //: may be null
 	Player4_BaseHP string `json:"p4_basehp,omitempty"`     //: may be null
 
-	FirstPlayer string `json:"first_playerid"` // "2" matches playerid above
+	FirstPlayer string `json:"first_playerid"` // integer, matches playerid above
+}
+
+func (metadata *LegacyReplayMetadata) Players() []Player {
+	players := make([]Player, 0)
+
+	return players
+}
+
+func (metadata *LegacyReplayMetadata) ToLegacyMatch() LegacyMatch {
+	match := LegacyMatch{}
+
+	return match
 }

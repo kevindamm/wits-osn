@@ -24,6 +24,7 @@ package main
 
 import (
 	"flag"
+	"log"
 )
 
 func main() {
@@ -33,6 +34,8 @@ func main() {
 		"create the table schemata before running, including enum values")
 	backfill_tsv := flag.String("backfill-tsv", "",
 		"path to a TSV file containing a legacy backup of replay file metadata")
+	backfill_replays := flag.String("backfill-replays", "",
+		"path to the parent directory where JSON files of wits replays are found")
 
 	flag.Parse()
 
@@ -53,6 +56,7 @@ func main() {
 	//	fmt.Println(string(replay_example))
 	//}
 	if *create_tables {
+		log.Println("creating DB tables...")
 		CreateTablesAndClose(*db_path)
 	}
 
@@ -60,7 +64,16 @@ func main() {
 	defer witsdb.Close()
 
 	if len(*backfill_tsv) > 0 {
-		err := BackfillDatabase(witsdb, *backfill_tsv)
-		assertNil(err)
+		log.Println("back-filling from legacy DB...")
+		assertNil(BackfillFromIndex(witsdb, *backfill_tsv))
 	}
+	if len(*backfill_replays) > 0 {
+		log.Println("back-filling from legacy replays...")
+		assertNil(BackfillFromReplays(witsdb, *backfill_replays))
+	}
+
+	// TODO fetch listing of recent (unaccounted-for) replays
+
+	// TODO fetch replays that haven't been fetched already
+
 }

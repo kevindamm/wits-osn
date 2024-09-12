@@ -36,7 +36,7 @@ import (
 type Metadata = osn.LegacyReplayMetadata
 
 func FetchLatestIndex() (total int, replays []Metadata) {
-	type ReplayWithTotal struct {
+	type IndexWithTotal struct {
 		Total   string     `json:"total"`
 		Replays []Metadata `json:"replays"`
 		When    string     `json:"ts"`
@@ -46,7 +46,7 @@ func FetchLatestIndex() (total int, replays []Metadata) {
 		return
 	}
 
-	index := new(ReplayWithTotal)
+	index := new(IndexWithTotal)
 	err = json.Unmarshal(responsebody, index)
 	if err != nil {
 		// unlikely error

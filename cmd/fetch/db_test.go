@@ -48,13 +48,13 @@ func TestDB(t *testing.T) {
 	// Closing and re-opening the database should still include the tables above.
 	db := main.OpenWitsDB(file.Name())
 
-	maps, err := db.Maps()
+	maps, err := db.AllMaps()
 	if err != nil {
 		t.Errorf("MapNames() error: %s\n", err)
 	}
+	t.Logf("maps: %v", maps)
 	if len(maps) != 17 {
 		t.Errorf("retrieved unexpected number of maps %d", len(maps))
-		t.Log(maps)
 	}
 
 	err = db.InsertPlayer(osn.Player{
@@ -71,7 +71,7 @@ func TestDB(t *testing.T) {
 	check_player(t, db, 1, "First")
 	check_player(t, db, 2, "2nd")
 
-	match := osn.LegacyReplayMetadata{
+	metadata := osn.LegacyReplayMetadata{
 		Index:       "5",
 		GameID:      "ag5vdXR3aXR0ZXJzZ2FtZXIQCxIIR2FtZVJvb20Y9-5HDA",
 		GameType:    "2",
@@ -104,6 +104,8 @@ func TestDB(t *testing.T) {
 
 		FirstPlayer: "3",
 	}
+	match := metadata.ToLegacyMatch()
+
 	err = db.InsertMatch(match)
 	if err != nil {
 		t.Errorf("error when inserting match metadata:\n%s", err)
@@ -112,24 +114,31 @@ func TestDB(t *testing.T) {
 	check_match(t, db, match)
 }
 
-func check_player(t *testing.T, db main.WitsDB, id int64, name string) {
+func check_player(t *testing.T, db main.WitsDB, id int, name string) {
 	player, err := db.Player(id)
 	if err != nil {
-		t.Errorf("error retrieving player (id=1)\n%s", err)
+		t.Errorf("error retrieving player (id=%d)\n%s", id, err)
 	}
 	if player.Name != name {
-		t.Errorf("incorrect name for player (id=1): %s", player.Name)
+		t.Errorf("incorrect name for player (id=%d): %s", id, player.Name)
 	}
 
 	player, err = db.PlayerByName(name)
 	if err != nil {
-		t.Errorf("error retrieving player (name=First)\n%s", err)
+		t.Errorf("error retrieving player (name=%s)\n%s", name, err)
 	}
 	if player.ID.RowID != id {
-		t.Errorf("incorrect ID for player (name=First): %d", player.ID.RowID)
+		t.Errorf("incorrect ID for player (name=%s): %d", name, player.ID.RowID)
 	}
 }
 
-func check_match(t *testing.T, db main.WitsDB, match osn.LegacyReplayMetadata) {
-	// TODO
+func check_match(t *testing.T, db main.WitsDB, expected osn.LegacyMatch) {
+	match, err := db.Match(expected.OsnMatchID)
+	if err != nil {
+		t.Errorf("error retrieving match %s\n", match.OsnMatchID)
+	}
+
+	if match.OsnMatchID != expected.OsnMatchID {
+
+	}
 }

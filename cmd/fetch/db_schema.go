@@ -36,14 +36,15 @@ func CreateTablesAndClose(db_path string) error {
 	defer witsdb.Close()
 
 	for _, statement := range []string{
-		// Enumerative relation between a map's name and its integer ID.
+		// Enumerative relation for maps, including some additional properties.
 		`CREATE TABLE "maps" (
       "map_id"        INTEGER PRIMARY KEY,
       "map_name"      VARCHAR(127) NOT NULL,
-      "map_theme"     INTEGER, -- matches RaceEnum
       "player_count"  INTEGER CHECK(player_count == 2 OR player_count == 4),
 
+      -- The following could be collected into a JSON field.
       "map_filename"  TEXT NOT NULL,
+      "map_theme"     INTEGER, -- matches RaceEnum
       "map_json"      TEXT,
       "width"         INTEGER,
       "height"        INTEGER,
@@ -51,28 +52,28 @@ func CreateTablesAndClose(db_path string) error {
       "deprecated"    BOOLEAN DEFAULT FALSE
     ) WITHOUT ROWID;`,
 
-		`INSERT INTO maps VALUES (0, "MAP_UNKNOWN", 0, NULL, "", NULL, 0, 0, true);`,
+		`INSERT INTO maps VALUES (0, "MAP_UNKNOWN", NULL, "", 0, NULL, 0, 0, true);`,
 		`INSERT INTO maps 
       (map_id, map_name, player_count, map_filename, map_theme, width, height)
     VALUES
-      (1,  "Machination",      4, "machination",       1, 13, 13),
-      (2,  "Foundry (v1)",     2, "foundry",           1, 13, 12),
-      (3,  "Foundry",          2, "foundry",           1, 13, 12),
-      (4,  "Glitch",           2, "glitch",            1, 11, 11),
-      (5,  "Candy Core Mine",  4, "candy-core-mine",   2, 13, 13),
-      (6,  "Sweetie Plains",   2, "sweetie-plains",    2, 13, 13),
-      (7,  "Peek-a-boo",       2, "peekaboo",          2, 13, 10),
-      (8,  "Blitz Beach",      4, "blitz-beach",       3, 13, 11),
-      (9,  "Long Nine",        2, "long-nine",         3, 13, 14),
-      (10, "Sharkfood Island", 2, "sharkfood-island",  3, 13, 10),
-      (11, "Acrospire",        4, "acrospire",         4, 13, 13),
-      (12, "Thorn Gulley",     2, "thorn-gulley",      4, 13, 12),
-      (13, "Reaper",           2, "reaper",            4, 13, 12),
-      (14, "Skull Duggery",    2, "skull-duggery",     3, 13, 10),
-      (15, "War Garden",       2, "war-garden",        4, 13, 12),
-      (16, "Sweet Tooth",      2, "sweet-tooth",       2, 13, 10),
-      (17, "Sugar Rock",       4, "sugar-rock",        2, 13, 13),
-      (18, "Mechanism",        4, "mechanism",         1, 13, 13);`,
+      (1,      "Machination",       4, "machination",        1,    13,    13),
+      (2,      "Foundry (v1)",      2, "foundry",            1,    13,    12),
+      (3,      "Foundry",           2, "foundry",            1,    13,    12),
+      (4,      "Glitch",            2, "glitch",             1,    11,    11),
+      (5,      "Candy Core Mine",   4, "candy-core-mine",    2,    13,    13),
+      (6,      "Sweetie Plains",    2, "sweetie-plains",     2,    13,    13),
+      (7,      "Peek-a-boo",        2, "peekaboo",           2,    13,    10),
+      (8,      "Blitz Beach",       4, "blitz-beach",        3,    13,    11),
+      (9,      "Long Nine",         2, "long-nine",          3,    13,    14),
+      (10,     "Sharkfood Island",  2, "sharkfood-island",   3,    13,    10),
+      (11,     "Acrospire",         4, "acrospire",          4,    13,    13),
+      (12,     "Thorn Gulley",      2, "thorn-gulley",       4,    13,    12),
+      (13,     "Reaper",            2, "reaper",             4,    13,    12),
+      (14,     "Skull Duggery",     2, "skull-duggery",      3,    13,    10),
+      (15,     "War Garden",        2, "war-garden",         4,    13,    12),
+      (16,     "Sweet Tooth",       2, "sweet-tooth",        2,    13,    10),
+      (17,     "Sugar Rock",        4, "sugar-rock",         2,    13,    13),
+      (18,     "Mechanism",         4, "mechanism",          1,    13,    13);`,
 		`UPDATE maps set deprecated = true WHERE map_id = 2;`,
 
 		// Enumerative relation for the different races.
@@ -150,7 +151,7 @@ func CreateTablesAndClose(db_path string) error {
         REFERENCES maps (map_id)
         ON DELETE CASCADE ON UPDATE NO ACTION,
 
-      UNIQUE (match_hash) ON CONFLICT FAIL
+      UNIQUE (match_hash) ON CONFLICT ABORT
     );`,
 
 		// Relation for which players are participating in which matches,

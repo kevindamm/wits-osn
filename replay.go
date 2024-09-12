@@ -22,7 +22,10 @@
 
 package osn
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 // This is the format as returned by the web service for a single game replay.
 //
@@ -45,7 +48,7 @@ type inner struct {
 func ParseReplay(filedata []byte) (string, []byte, error) {
 	var on_wire WireFormat
 	var gamestate inner
-	var replay LegacyMatchReplay
+	var replay LegacyMatch
 	err := json.Unmarshal(filedata, &on_wire)
 	if err != nil {
 		return "", []byte{}, err
@@ -62,7 +65,28 @@ func ParseReplay(filedata []byte) (string, []byte, error) {
 	return on_wire.Wrapper.RoomID, bytes, err
 }
 
-// The slightly-flattened complete representation of a match replay from OSN.
-type LegacyMatchReplay struct {
-	OsnMatchID string `json:"game_id"`
+type LegacyMatchWithReplay struct {
+	LegacyMatch
+	ReplayData
+}
+
+// The metadata of a single match between two or four players.
+// Everything but the social signals (views/likes) and replay (player turns).
+type LegacyMatch struct {
+	OsnMatchID  string    `json:"gameid"`
+	Competitive bool      `json:"competitive"`
+	Season      int       `json:"season"`
+	StartTime   time.Time `json:"created"`
+	Version     int       `json:"engine"`
+	MapID       int       `json:"mapid"`
+
+	Players []Player `json:"players"`
+	First   string   `json:"first_playerid"`
+}
+
+var UNKNOWN_MATCH LegacyMatch = LegacyMatch{
+	OsnMatchID: "",
+}
+
+type ReplayData struct {
 }
