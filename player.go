@@ -22,6 +22,12 @@
 
 package osn
 
+import (
+	"fmt"
+	"log"
+	"strconv"
+)
+
 type Player struct {
 	ID   PlayerID
 	Name string
@@ -47,25 +53,72 @@ var UNKNOWN_PLAYER Player = Player{
 }
 
 // An ELO-like measurement and a current league + standings.
-type PlayerStanding struct {
-	League LeagueEnum
-	Rank   LeagueRank
+type PlayerStanding interface {
+	League() LeagueEnum
+	Rank() LeagueRank
 
-	Points uint16
-	Delta  int8
+	PointsBefore() uint16
+	PointsAfter() uint16
+	Delta() int8
 }
 
+func NewStanding(league LeagueEnum, rank LeagueRank, points uint16, delta int8) (PlayerStanding, error) {
+	if !league.Valid() {
+		return nil, fmt.Errorf("invalid league value %d", rank)
+	}
+	if rank < 0 || rank >= 128 {
+		return nil, fmt.Errorf("invalid standings rank value %d", rank)
+	}
+	return standing{league, rank, points, delta}, nil
+}
+
+type standing struct {
+	league LeagueEnum
+	rank   LeagueRank
+	points uint16
+	delta  int8
+}
+
+func (ranked standing) League() LeagueEnum  { return ranked.league }
+func (ranked standing) Rank() LeagueRank    { return ranked.rank }
+func (ranked standing) PointsAfter() uint16 { return ranked.points }
+func (ranked standing) Delta() int8         { return ranked.delta }
+func (ranked standing) PointsBefore() uint16 {
+	return uint16(int(ranked.points) - int(ranked.delta))
+}
+
+// FROZEN
 type LeagueEnum uint8
 
+// Using iota here because I don't plan on ever changing the OSN representation.
+// See github.com/kevindamm/wits-go for a more forward-compatible enumeration.
 const (
-	LEAGUE_UNKNOWN    LeagueEnum = 0
-	LEAGUE_FLUFFY     LeagueEnum = 1
-	LEAGUE_CLEVER     LeagueEnum = 2
-	LEAGUE_GIFTED     LeagueEnum = 3
-	LEAGUE_MASTER     LeagueEnum = 4
-	LEAGUE_SUPERTITAN LeagueEnum = 5
+	LEAGUE_UNKNOWN LeagueEnum = iota
+	LEAGUE_FLUFFY
+	LEAGUE_CLEVER
+	LEAGUE_GIFTED
+	LEAGUE_MASTER
+	LEAGUE_SUPERTITAN
 )
 
+func (league LeagueEnum) Valid() bool {
+	return uint8(league) > 0 && uint8(league) <= uint8(LEAGUE_SUPERTITAN)
+}
+
+// Parse the integer representation in the provided string, returns
+// LEAGUE_UNKNOWN if there was an error or no league with that number.
+func ParseLeague(str_uint string) LeagueEnum {
+	value, err := strconv.Atoi(str_uint)
+	if err != nil || !LeagueEnum(value).Valid() {
+		log.Printf("unrecognized league %s\n%s", str_uint, err)
+		return LEAGUE_UNKNOWN
+	}
+	return LeagueEnum(value)
+}
+
 // The player's rank within their current group.
-//
+// Players are placed in groups of around 100 when entering a league.
+// Each of these divisions is given a name but historical data of that is
+// not included in the replay or index data sent from OSN, and is not relevant
+// enough to the replay analysis to be archived with the replay data.
 type LeagueRank uint8

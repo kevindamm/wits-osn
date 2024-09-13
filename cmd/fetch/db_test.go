@@ -48,13 +48,27 @@ func TestDB(t *testing.T) {
 	// Closing and re-opening the database should still include the tables above.
 	db := main.OpenWitsDB(file.Name())
 
+	mapobj, err := db.Map(1)
+	if err != nil {
+		t.Errorf("could not find map ID 1: %s", err)
+	}
+	if mapobj.MapID != 1 || mapobj.Name != "Machination" {
+		t.Error("retrieved incorrect map for ID 1")
+	}
+
+	mapobj, err = db.Map(2)
+	if err == nil || mapobj.MapID != 0 {
+		t.Error("deprecated map should not be included")
+	}
+
 	maps, err := db.AllMaps()
 	if err != nil {
 		t.Errorf("MapNames() error: %s\n", err)
-	}
-	t.Logf("maps: %v", maps)
-	if len(maps) != 17 {
-		t.Errorf("retrieved unexpected number of maps %d", len(maps))
+	} else {
+		t.Logf("maps: %v", maps)
+		if len(maps) != 17 {
+			t.Errorf("retrieved unexpected number of maps %d", len(maps))
+		}
 	}
 
 	err = db.InsertPlayer(osn.Player{
@@ -139,6 +153,7 @@ func check_match(t *testing.T, db main.WitsDB, expected osn.LegacyMatch) {
 	}
 
 	if match.OsnMatchID != expected.OsnMatchID {
-
+		t.Errorf("match IDs don't match %s != %s",
+			match.OsnMatchID, expected.OsnMatchID)
 	}
 }

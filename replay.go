@@ -24,47 +24,11 @@ package osn
 
 import (
 	"encoding/json"
+	"log"
 	"time"
 )
 
-// This is the format as returned by the web service for a single game replay.
-//
-// It is a shallow wrapper around the actual game replay, containing four
-// dictionary entries, one of which is a string representation of the game.
-type WireFormat struct {
-	Wrapper outer `json:"viewResponse"` // Path reference of an `.hxm` file.
-}
-
-type outer struct {
-	Wrapper string `json:"gameState"` // Wrapper around the turn's frames.
-	Found   bool   `json:"foundRoom"` // Always true - a game lobby was found.
-	RoomID  string `json:"room"`      // The game (and game replay) identifier.
-}
-
-type inner struct {
-	Wrapper string `json:"gameState"`
-}
-
-func ParseReplay(filedata []byte) (string, []byte, error) {
-	var on_wire WireFormat
-	var gamestate inner
-	var replay LegacyMatch
-	err := json.Unmarshal(filedata, &on_wire)
-	if err != nil {
-		return "", []byte{}, err
-	}
-	err = json.Unmarshal([]byte(on_wire.Wrapper.Wrapper), &gamestate)
-	if err != nil {
-		return on_wire.Wrapper.RoomID, []byte{}, err
-	}
-	err = json.Unmarshal([]byte(gamestate.Wrapper), &replay)
-	if err != nil {
-
-	}
-	bytes, err := json.Marshal(replay)
-	return on_wire.Wrapper.RoomID, bytes, err
-}
-
+// Contains both the metadata (as LegacyMatch) and player turns (as ReplayData).
 type LegacyMatchWithReplay struct {
 	LegacyMatch
 	ReplayData
@@ -88,5 +52,46 @@ var UNKNOWN_MATCH LegacyMatch = LegacyMatch{
 	OsnMatchID: "",
 }
 
-type ReplayData struct {
+// This is the format as returned by the web service for a single game replay.
+//
+// It is a shallow wrapper around the actual game replay, containing four
+// dictionary entries, one of which is a string representation of the game.
+type WireFormat struct {
+	Wrapper outer `json:"viewResponse"` // Path reference of an `.hxm` file.
 }
+
+type outer struct {
+	Wrapper string `json:"gameState"` // Wrapper around the turn's frames.
+	Found   bool   `json:"foundRoom"` // Always true - a game lobby was found.
+	RoomID  string `json:"room"`      // The game (and game replay) identifier.
+}
+
+type inner struct {
+	Wrapper string `json:"gameState"`
+}
+
+func ParseRawReplay(filedata []byte) (string, []byte, error) {
+	var on_wire WireFormat
+	var gamestate inner
+	var replay LegacyMatch
+	err := json.Unmarshal(filedata, &on_wire)
+	if err != nil {
+		return "", []byte{}, err
+	}
+	err = json.Unmarshal([]byte(on_wire.Wrapper.Wrapper), &gamestate)
+	if err != nil {
+		return on_wire.Wrapper.RoomID, []byte{}, err
+	}
+	err = json.Unmarshal([]byte(gamestate.Wrapper), &replay)
+	if err != nil {
+		return on_wire.Wrapper.RoomID, []byte{}, err
+	}
+	if replay.OsnMatchID != on_wire.Wrapper.RoomID {
+		log.Printf("found MatchID (%s) different from its room ID (%s)",
+			replay.OsnMatchID, on_wire.Wrapper.RoomID)
+	}
+	bytes, err := json.Marshal(replay)
+	return on_wire.Wrapper.RoomID, bytes, err
+}
+
+type ReplayData map[string]interface{}

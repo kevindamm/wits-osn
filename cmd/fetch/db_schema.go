@@ -187,8 +187,6 @@ func CreateTablesAndClose(db_path string) error {
       "player_points" INTEGER DEFAULT 0,
       "player_delta"  INTEGER DEFAULT 0,
 
-      "prev_points"   INTEGER DEFAULT 0,
-
       FOREIGN KEY (after)
         REFERENCES roles (rowid)
         ON DELETE CASCADE ON UPDATE NO ACTION,

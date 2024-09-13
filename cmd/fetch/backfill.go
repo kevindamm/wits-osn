@@ -66,10 +66,11 @@ func BackfillFromIndex(witsdb WitsDB, tsv_path string) error {
 		}
 
 		metadata := osn.LegacyReplayMetadata{
+
 			GameID: values[indices["game_id"]],
 			//GameType:
 		}
-		curmap, err := witsdb.Map(parse_int(values[indices["map_id"]]))
+		curmap, err := witsdb.Map(assert_int(values[indices["map_id"]]))
 		if err != nil {
 			return err
 		}
@@ -136,7 +137,8 @@ func verify_columns(columns []string) map[string]int {
 	return indices
 }
 
-func parse_int(intstr string) int {
+// Convert string into an integer or fail with LOG(FATAL) << error.
+func assert_int(intstr string) int {
 	value, err := strconv.Atoi(intstr)
 	if err != nil {
 		log.Fatal(err)

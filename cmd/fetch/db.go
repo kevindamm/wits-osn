@@ -39,7 +39,7 @@ type WitsDB interface {
 
 	InsertPlayer(osn.Player) error
 	InsertMatch(osn.LegacyMatch) error
-	InsertStanding(osn.PlayerStanding) error
+	InsertStanding(osn.PlayerStanding, int, int) error
 
 	AllMaps() ([]osn.Map, error)
 	Map(id int) (osn.Map, error)
@@ -116,8 +116,23 @@ func (witsdb *witsdb) PrepareQueries() error {
 		return err
 	}
 
+	witsdb.insertStanding, err = db.Prepare(`INSERT INTO
+	  standings (after, player_league, player_rank, player_points, player_delta)
+		VALUES (?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		return err
+	}
+
+	witsdb.updatePrevStanding, err = db.Prepare(`UPDATE standings
+		SET until = ?
+		WHERE after = ?;`)
+	if err != nil {
+		return err
+	}
+
 	witsdb.selectMaps, err = db.Prepare(`SELECT
-	  map_id, map_name, map_filename, player_count
+	  map_id, map_name, player_count, map_filename, map_theme, width, height
 	  FROM maps
 		WHERE NOT deprecated`)
 	if err != nil {
@@ -206,6 +221,7 @@ func (db *witsdb) PlayerByName(name string) (osn.Player, error) {
 
 func (db *witsdb) InsertPlayer(player osn.Player) error {
 	if _, ok := db.cachedPlayers[player.ID.RowID]; ok {
+		// don't need to insert the same player twice
 		return nil
 	}
 
@@ -225,7 +241,11 @@ func (db *witsdb) AllMaps() ([]osn.Map, error) {
 
 		mapobj := osn.Map{}
 		for rows.Next() {
-			rows.Scan(&mapobj.MapID, &mapobj.Name)
+			// map_id, map_name, player_count, map_filename, map_theme, width, height
+			rows.Scan(
+				&mapobj.MapID, &mapobj.Name, &mapobj.PlayerCount,
+				&mapobj.Filename, &mapobj.Theme,
+				&mapobj.Width, &mapobj.Height)
 			maps = append(maps, mapobj)
 		}
 	}
@@ -299,7 +319,15 @@ func (db *witsdb) InsertMatch(osn.LegacyMatch) error {
 	return nil
 }
 
-func (db *witsdb) InsertStanding(osn.PlayerStanding) error {
-	//  TODO
+func (db *witsdb) InsertStanding(standing osn.PlayerStanding, previous int, current int) error {
+	if _, err := db.insertStanding.Exec(
+		current, standing.League(), standing.Rank(),
+		standing.PointsAfter(), standing.Delta()); err != nil {
+		return err
+	}
+	if _, err := db.updatePrevStanding.Exec(current, previous); err != nil {
+		return err
+	}
+
 	return nil
 }
