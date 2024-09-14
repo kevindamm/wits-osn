@@ -16,6 +16,8 @@
 
 package osn
 
+import "strconv"
+
 // The (unaltered) representation of match-related metadata from OSN.
 //
 // This includes everything in the match entries of the json response
@@ -71,8 +73,45 @@ type LegacyReplayMetadata struct {
 }
 
 func (metadata *LegacyReplayMetadata) Players() []Player {
-	players := make([]Player, 0)
+	numPlayers, err := strconv.Atoi(metadata.GameType)
+	if err != nil {
+		return []Player{}
+	}
+	if numPlayers%2 == 1 {
+		numPlayers -= 1
+	}
+	players := make([]Player, numPlayers)
 
+	if numPlayers == 2 || numPlayers == 4 {
+		playerRowID, err := strconv.Atoi(metadata.Player1_ID)
+		if err == nil {
+			players[0] = NewPlayer(playerRowID, metadata.Player1_Name)
+		} else {
+			players[0] = UNKNOWN_PLAYER
+		}
+
+		playerRowID, err = strconv.Atoi(metadata.Player2_ID)
+		if err == nil {
+			players[1] = NewPlayer(playerRowID, metadata.Player2_Name)
+		} else {
+			players[1] = UNKNOWN_PLAYER
+		}
+	}
+	if numPlayers == 4 {
+		playerRowID, err := strconv.Atoi(metadata.Player3_ID)
+		if err == nil {
+			players[3] = NewPlayer(playerRowID, metadata.Player3_Name)
+		} else {
+			players[3] = UNKNOWN_PLAYER
+		}
+
+		playerRowID, err = strconv.Atoi(metadata.Player4_ID)
+		if err == nil {
+			players[4] = NewPlayer(playerRowID, metadata.Player4_Name)
+		} else {
+			players[4] = UNKNOWN_PLAYER
+		}
+	}
 	return players
 }
 

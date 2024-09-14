@@ -23,6 +23,7 @@
 package main
 
 import (
+	"database/sql"
 	"errors"
 	"log"
 )
@@ -116,6 +117,8 @@ func CreateTablesAndClose(db_path string) error {
       "name"  TEXT NOT NULL
     ) WITHOUT ROWID;`,
 
+		`INSERT INTO players (id, name) VALUES (0, "UNKNOWN");`,
+
 		// We don't always know the GC:ID (it is revealed in replays),
 		// having it as a separate table affords
 		// both optional and non-null uniqueness.
@@ -128,15 +131,13 @@ func CreateTablesAndClose(db_path string) error {
         ON DELETE CASCADE ON UPDATE NO ACTION
     ) WITHOUT ROWID;`,
 
-		`INSERT INTO players (id, name) VALUES (0, "UNKNOWN");`,
-
 		// The `matches` metadata relates to an instance of a game between two
 		// players.  This differs from the serialized replays that relate entirely
 		// to each game's turns, or `solo_roles` which uniquely indexes the players
 		// to their involvement in the match.
 		`CREATE TABLE "matches" (
       -- rowid INTEGER PRIMARY KEY AUTOINCREMENT, -- legacy "id" or Index
-      "match_hash"   TEXT NOT NULL,
+      "match_hash"   TEXT NOT NULL UNIQUE,
       "competitive"  BOOLEAN,   -- league or friendly
       "season"       INTEGER,   -- seasons are of variable duration
       "start_time"   TIMESTAMP, -- time at creation, UTC
@@ -149,9 +150,17 @@ func CreateTablesAndClose(db_path string) error {
 
       FOREIGN KEY (map_id)
         REFERENCES maps (map_id)
-        ON DELETE CASCADE ON UPDATE NO ACTION,
+        ON DELETE CASCADE ON UPDATE NO ACTION
+    );`,
 
-      UNIQUE (match_hash) ON CONFLICT ABORT
+		// Because the metadata in the replay listings doesn't include the rowid
+		// from OSN but the replays themselves do, this table helps realign them.
+		`CREATE TABLE "match_order" (
+      -- rowid INTEGER PRIMARY KEY AUTOINCREMENT
+      match_index INTEGER UNIQUE,
+      FOREIGN KEY (match_index)
+        REFERENCES matches (rowid)
+        ON DELETE CASCADE ON UPDATE NO ACTION
     );`,
 
 		// Relation for which players are participating in which matches,
@@ -205,5 +214,19 @@ func CreateTablesAndClose(db_path string) error {
 			log.Fatal(err)
 		}
 	}
+	return nil
+}
+
+// Convenience function for ad-hoc query execution.
+func exec(db *sql.DB, query string) error {
+	stmt, err := db.Prepare(query)
+	if err != nil {
+		return err
+	}
+	_, err = stmt.Exec()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }

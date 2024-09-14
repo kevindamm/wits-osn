@@ -33,6 +33,11 @@ type Player struct {
 	Name string
 }
 
+// Simple (no GCID) constructor for a Player instance.
+func NewPlayer(id int, name string) Player {
+	return Player{ID: PlayerID{RowID: id}, Name: name}
+}
+
 type PlayerRole struct {
 	Player
 	TurnOrder  int

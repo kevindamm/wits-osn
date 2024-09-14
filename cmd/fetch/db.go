@@ -34,7 +34,7 @@ import (
 // Interface for simplifying the interaction with a backing database.
 //
 // DB includes match metadata, map identities, player history and replay index.
-type WitsDB interface {
+type OsnWitsDB interface {
 	Close() // also closes the SqlDB
 
 	InsertPlayer(osn.Player) error
@@ -62,7 +62,7 @@ func assertNil(err error) {
 //
 // Asserts db exists and basic queries can be constructed.
 // LOG(FATAL) on any error but database is not modified.
-func OpenWitsDB(filepath string) WitsDB {
+func OpenWitsDB(filepath string) OsnWitsDB {
 	witsdb, err := open_database(filepath)
 	if err != nil {
 		log.Fatal(err)
@@ -70,7 +70,7 @@ func OpenWitsDB(filepath string) WitsDB {
 	if err = witsdb.PrepareQueries(); err != nil {
 		log.Fatal(err)
 	}
-	return WitsDB(witsdb)
+	return OsnWitsDB(witsdb)
 }
 
 // Opens a connection to the database but does not prepare any queries.
@@ -101,10 +101,24 @@ func (witsdb *witsdb) PrepareQueries() error {
 		return err
 	}
 
+	witsdb.insertPlayerGCID, err = db.Prepare(`INSERT INTO
+		player_gcid (player_id, gcid)
+		VALUES (?, ?)`)
+	if err != nil {
+		return err
+	}
+
 	witsdb.insertMatch, err = db.Prepare(`INSERT INTO
-		matches (rowid, match_hash, competitive, season, start_time,
+		matches (match_hash, competitive, season, start_time,
 		  map_id, turn_count, version, osn_status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+
+	witsdb.insertMatchIndex, err = db.Prepare(`INSERT INTO
+	  match_order (rowid, match_index)
+		VALUES (?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -170,7 +184,9 @@ type witsdb struct {
 	cachedPlayers map[int]osn.Player
 
 	insertPlayer       *sql.Stmt
+	insertPlayerGCID   *sql.Stmt
 	insertMatch        *sql.Stmt
+	insertMatchIndex   *sql.Stmt
 	insertPlayerRole   *sql.Stmt
 	insertStanding     *sql.Stmt
 	updatePrevStanding *sql.Stmt
@@ -186,19 +202,29 @@ func (db *witsdb) Close() {
 }
 
 func (db *witsdb) Player(id int) (osn.Player, error) {
-	player := osn.UNKNOWN_PLAYER
-	row, err := db.selectPlayerByID.Query(id)
-	if err != nil {
-		return player, err
+	if db.cachedPlayers == nil {
+		db.cachedPlayers = make(map[int]osn.Player)
 	}
-	if !row.Next() {
-		return player, fmt.Errorf("no player with ID %d", id)
+	if player, ok := db.cachedPlayers[id]; ok {
+		return player, nil
 	}
 
+	row, err := db.selectPlayerByID.Query(id)
+	if err != nil {
+		return osn.UNKNOWN_PLAYER, err
+	}
+	if !row.Next() {
+		return osn.UNKNOWN_PLAYER, fmt.Errorf("no player with ID %d", id)
+	}
+
+	player := osn.Player{}
 	err = row.Scan(&player.ID.RowID, &player.Name)
 	if err != nil {
 		return player, err
 	}
+
+	// TODO also retrieve latest standings
+
 	return player, nil
 }
 
@@ -220,16 +246,27 @@ func (db *witsdb) PlayerByName(name string) (osn.Player, error) {
 }
 
 func (db *witsdb) InsertPlayer(player osn.Player) error {
-	if _, ok := db.cachedPlayers[player.ID.RowID]; ok {
-		// don't need to insert the same player twice
-		return nil
-	}
-
-	_, err := db.insertPlayer.Exec(player.ID.RowID, player.Name)
-	if err != nil {
+	if _, ok := db.cachedPlayers[player.ID.RowID]; !ok {
+		if db.cachedPlayers == nil {
+			db.cachedPlayers = make(map[int]osn.Player)
+		}
+		_, err := db.insertPlayer.Exec(player.ID.RowID, player.Name)
+		if err != nil {
+			return err
+		}
 		db.cachedPlayers[player.ID.RowID] = player
 	}
-	return err
+
+	if player.ID.GCID != "" {
+		_, err := db.insertPlayerGCID.Exec(player.ID.RowID, player.ID.GCID)
+		if err != nil {
+			return err
+		}
+	}
+
+	// TODO? detect and insert standings
+
+	return nil
 }
 
 func (db *witsdb) AllMaps() ([]osn.Map, error) {
@@ -300,21 +337,7 @@ func (db *witsdb) Match(id string) (osn.LegacyMatch, error) {
 	return match, nil
 }
 
-func exec(db *sql.DB, query string) error {
-	stmt, err := db.Prepare(query)
-	if err != nil {
-		return err
-	}
-	_, err = stmt.Exec()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (db *witsdb) InsertMatch(osn.LegacyMatch) error {
-	// TODO
 
 	return nil
 }

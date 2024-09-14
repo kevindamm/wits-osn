@@ -43,9 +43,10 @@ type LegacyMatch struct {
 	StartTime   time.Time `json:"created"`
 	Version     int       `json:"engine"`
 	MapID       int       `json:"mapid"`
+	TurnCount   int       `json:"turn_count"`
 
-	Players []Player `json:"players"`
-	First   string   `json:"first_playerid"`
+	Players []Player `json:"players,omitempty"`
+	First   string   `json:"first_playerid,omitempty"`
 }
 
 var UNKNOWN_MATCH LegacyMatch = LegacyMatch{

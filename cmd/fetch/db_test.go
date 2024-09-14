@@ -86,7 +86,7 @@ func TestDB(t *testing.T) {
 	check_player(t, db, 2, "2nd")
 
 	metadata := osn.LegacyReplayMetadata{
-		Index:       "5",
+		//Index:       "5",
 		GameID:      "ag5vdXR3aXR0ZXJzZ2FtZXIQCxIIR2FtZVJvb20Y9-5HDA",
 		GameType:    "2",
 		LeagueMatch: "1",
@@ -128,7 +128,7 @@ func TestDB(t *testing.T) {
 	check_match(t, db, match)
 }
 
-func check_player(t *testing.T, db main.WitsDB, id int, name string) {
+func check_player(t *testing.T, db main.OsnWitsDB, id int, name string) {
 	player, err := db.Player(id)
 	if err != nil {
 		t.Errorf("error retrieving player (id=%d)\n%s", id, err)
@@ -146,14 +146,31 @@ func check_player(t *testing.T, db main.WitsDB, id int, name string) {
 	}
 }
 
-func check_match(t *testing.T, db main.WitsDB, expected osn.LegacyMatch) {
+func check_match(t *testing.T, db main.OsnWitsDB, expected osn.LegacyMatch) {
 	match, err := db.Match(expected.OsnMatchID)
 	if err != nil {
 		t.Errorf("error retrieving match %s\n", match.OsnMatchID)
 	}
 
 	if match.OsnMatchID != expected.OsnMatchID {
-		t.Errorf("match IDs don't match %s != %s",
+		t.Errorf("match ID incorrect; got %s (expected %s)",
 			match.OsnMatchID, expected.OsnMatchID)
 	}
+	if match.Competitive != expected.Competitive {
+		t.Errorf("competitive %v != expected.competitive %v", match.Competitive, expected.Competitive)
+	}
+	if match.Season != expected.Season {
+		t.Errorf("season %d != expected.season %d", match.Season, expected.Season)
+	}
+	if match.StartTime != expected.StartTime {
+		t.Errorf("start_time %s != expected.start_time %s",
+			match.StartTime, expected.StartTime)
+	}
+	if match.MapID != expected.MapID {
+		t.Errorf("map_id %d != expected.map_id %d", match.MapID, expected.MapID)
+	}
+	if match.TurnCount != expected.TurnCount {
+		t.Errorf("turn_count %d != expected.turn_count %d", match.TurnCount, expected.TurnCount)
+	}
+
 }
