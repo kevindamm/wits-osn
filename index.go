@@ -25,16 +25,16 @@ import "strconv"
 type LegacyReplayMetadata struct {
 	Index       string `json:"id"`            // integer index into sequential games
 	GameID      string `json:"gameid"`        // hash of game creation
-	GameType    string `json:"gametype"`      // solo "2" vs duo "4"
+	NumPlayers  string `json:"gametype"`      // solo ("2") vs duo ("4")
 	LeagueMatch string `json:"isleaguematch"` // "1" if true
 	Created     string `json:"created"`       // 2012-08-05 14:33:21
-	Season      string `json:"season"`        // integer "1"
+	Season      string `json:"season"`        // integer ("1")
 
 	// Runtime is parameterized by engine version and map definition.
-	WitsVersion string `json:"engine"`     // integer #=< 1063, "1000" is v1
-	MapID       string `json:"mapid"`      // indexed, e.g. "4"
-	MapName     string `json:"map_title"`  // display name, e.g. "Glitch"
-	MapTheme    string `json:"map_raceid"` // enumeration, e.g. "1"
+	WitsVersion string `json:"engine"`     // integer #=< 1063, ("1000" is v1)
+	MapID       string `json:"mapid"`      // relates to indexed maps, (id "4")
+	MapName     string `json:"map_title"`  // display name ("Glitch"), redundant
+	MapTheme    string `json:"map_raceid"` // enumeration, e.g. "1" is Feedback
 
 	// These aren't persisted in the database but appear in the OSN index.
 	TurnCount string `json:"turn_count"` // integer "34"
@@ -73,12 +73,9 @@ type LegacyReplayMetadata struct {
 }
 
 func (metadata *LegacyReplayMetadata) Players() []Player {
-	numPlayers, err := strconv.Atoi(metadata.GameType)
+	numPlayers, err := strconv.Atoi(metadata.NumPlayers)
 	if err != nil {
 		return []Player{}
-	}
-	if numPlayers%2 == 1 {
-		numPlayers -= 1
 	}
 	players := make([]Player, numPlayers)
 

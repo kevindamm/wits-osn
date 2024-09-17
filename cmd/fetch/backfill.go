@@ -71,7 +71,7 @@ func BackfillFromIndex(witsdb OsnWitsDB, tsv_path string) error {
 
 		metadata := osn.LegacyReplayMetadata{
 			GameID:      values[indices["game_id"]],
-			GameType:    num_players(values[indices["game_type"]]),
+			NumPlayers:  num_players(values[indices["game_type"]]),
 			LeagueMatch: league_match(values[indices["game_type"]]),
 			Created:     values[indices["created"]],
 			Season:      values[indices["season"]],
@@ -84,21 +84,36 @@ func BackfillFromIndex(witsdb OsnWitsDB, tsv_path string) error {
 			return err
 		}
 
+		playerIDs := split_list(values[indices["player_ids"]])
 		playerNames := split_list(values[indices["player_names"]])
-		metadata.Player1_Name = playerNames[0]
-		metadata.Player2_Name = playerNames[1]
-		if metadata.GameType == "4" {
-			metadata.Player3_Name = playerNames[2]
-			metadata.Player4_Name = playerNames[3]
-		}
-		//TODO assign
-		//playerIDs := split_list(values[indices["player_ids"]])
-		//TODO assign
-		//playerLeagues := split_list(values[indices["player_leagues"]])
-		//TODO assign
-		//playerRaces := split_list(values[indices["player_races"]])
+		playerLeagues := split_list(values[indices["player_leagues"]])
+		playerRaces := split_list(values[indices["player_races"]])
 
-		// TODO
+		metadata.Player1_Name = playerNames[0]
+		metadata.Player1_ID = playerIDs[0]
+		metadata.Player1_League = playerLeagues[0]
+		metadata.Player1_Race = playerRaces[0]
+
+		metadata.Player2_Name = playerNames[1]
+		metadata.Player2_ID = playerIDs[1]
+		metadata.Player2_League = playerLeagues[1]
+		metadata.Player2_Race = playerRaces[1]
+
+		// DEBUG
+		log.Print(metadata)
+
+		if metadata.NumPlayers == "4" {
+			metadata.Player3_Name = playerNames[2]
+			metadata.Player3_ID = playerIDs[2]
+			metadata.Player3_League = playerLeagues[2]
+			metadata.Player3_Race = playerRaces[2]
+
+			metadata.Player4_Name = playerNames[3]
+			metadata.Player4_ID = playerIDs[3]
+			metadata.Player4_League = playerLeagues[3]
+			metadata.Player4_Race = playerRaces[3]
+		}
+
 		players := metadata.Players()
 		for _, player := range players {
 			witsdb.InsertPlayer(player)
@@ -211,6 +226,7 @@ func split_list(liststr string) []string {
 	for reListItem.Match(items) {
 		match := reListItem.FindSubmatchIndex(items)
 		list = append(list, string(liststr[match[0]:match[1]]))
+		items = items[match[1]+1:]
 	}
 
 	return list

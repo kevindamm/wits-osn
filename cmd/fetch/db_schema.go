@@ -37,6 +37,19 @@ func CreateTablesAndClose(db_path string) error {
 	defer witsdb.Close()
 
 	for _, statement := range []string{
+		// Enumerative relation for unit races.
+		`create TABLE "races" (
+      "race_id"    INTEGER PRIMARY KEY,
+      "race_name"  VARCHAR(20) NOT NULL,
+      "hero"       VARCHAR(10) NOT NULL
+    ) WITHOUT ROWID;`,
+
+		`INSERT INTO races VALUES
+      (1, "Feedback",    "Scrambler"),
+      (2, "Adorables",   "Mobi"),
+      (3, "Scallywags",  "Bombshell"),
+      (4, "Veggienauts", "Bamble");`,
+
 		// Enumerative relation for maps, including some additional properties.
 		`CREATE TABLE "maps" (
       "map_id"        INTEGER PRIMARY KEY,
@@ -45,12 +58,15 @@ func CreateTablesAndClose(db_path string) error {
 
       -- The following could be collected into a JSON field.
       "map_filename"  TEXT NOT NULL,
-      "map_theme"     INTEGER, -- matches RaceEnum
+      "map_theme"     INTEGER,
       "map_json"      TEXT,
       "width"         INTEGER,
       "height"        INTEGER,
 
-      "deprecated"    BOOLEAN DEFAULT FALSE
+      "deprecated"    BOOLEAN DEFAULT FALSE,
+
+      FOREIGN KEY (map_theme) REFERENCES races (race_id)
+        ON DELETE CASCADE ON UPDATE NO ACTION
     ) WITHOUT ROWID;`,
 
 		`INSERT INTO maps VALUES (0, "MAP_UNKNOWN", NULL, "", 0, NULL, 0, 0, true);`,

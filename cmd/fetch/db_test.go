@@ -23,6 +23,7 @@
 package main_test
 
 import (
+	"log"
 	"os"
 	"testing"
 
@@ -88,7 +89,7 @@ func TestDB(t *testing.T) {
 	metadata := osn.LegacyReplayMetadata{
 		//Index:       "5",
 		GameID:      "ag5vdXR3aXR0ZXJzZ2FtZXIQCxIIR2FtZVJvb20Y9-5HDA",
-		GameType:    "2",
+		NumPlayers:  "2",
 		LeagueMatch: "1",
 		Created:     "",
 		Season:      "1",
@@ -118,6 +119,8 @@ func TestDB(t *testing.T) {
 
 		FirstPlayer: "3",
 	}
+	log.Print(metadata)
+
 	match := metadata.ToLegacyMatch()
 
 	err = db.InsertMatch(match)
@@ -147,14 +150,14 @@ func check_player(t *testing.T, db main.OsnWitsDB, id int, name string) {
 }
 
 func check_match(t *testing.T, db main.OsnWitsDB, expected osn.LegacyMatch) {
-	match, err := db.Match(expected.OsnMatchID)
+	match, err := db.Match(string(expected.MatchID))
 	if err != nil {
-		t.Errorf("error retrieving match %s\n", match.OsnMatchID)
+		t.Errorf("error retrieving match %s\n", match.MatchID)
 	}
 
-	if match.OsnMatchID != expected.OsnMatchID {
+	if match.MatchID != expected.MatchID {
 		t.Errorf("match ID incorrect; got %s (expected %s)",
-			match.OsnMatchID, expected.OsnMatchID)
+			match.MatchID, expected.MatchID)
 	}
 	if match.Competitive != expected.Competitive {
 		t.Errorf("competitive %v != expected.competitive %v", match.Competitive, expected.Competitive)
