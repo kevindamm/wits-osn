@@ -18,142 +18,30 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-// github:kevindamm/wits-osn/cmd/fetch/fetcher.go
+// github:kevindamm/wits-osn/fetcher.go
 
 package main
 
 import (
+	"encoding/json"
+	"io"
+	"log"
+	"net/http"
+	"net/url"
+	"os"
+	"strconv"
+
 	osn "github.com/kevindamm/wits-osn"
 )
 
-// Retrieves JSON data from OSN URLs based on index contents of OSN listings.
-// Maintains a persisted local state in a database (see [OsnWitsDB]) to reduce
-// repeated retrievals.  Rate-limits retrievals of the index and match replays
-// to reduce load on the OSN host.
-type Fetcher interface {
-	// Retrieves the data from an OSN index page and provides a channel for new
-	// (unique) match replay entries, or a nil channel and non-nil error.
-	FetchIndexPage(int) (<-chan osn.LegacyReplayMetadata, error)
-
-	// Retrieves the match with indicated ID and saves it to a local file.
-	// Returns the file path for the replay, or "" and a non-nil error.
-	FetchReplay(string) (string, error)
-}
-
-// The implementation of Fetcher interface and its internal state.
-type fetcher struct {
-	db    OsnWitsDB
-	path  string
-	queue chan<- task
-}
-
-type task interface {
-	Url() string
-	Process([]byte) error
-}
-
-// Constructor function for a Fetcher instance.
-func NewFetcher(witsdb OsnWitsDB, datapath string) Fetcher {
-	taskchan := make(chan task)
-	// TODO create cancelable goroutine for
-	return &fetcher{witsdb, datapath, taskchan}
-}
-
-func (fetch *fetcher) FetchIndexPage(pagenum int) (<-chan osn.LegacyReplayMetadata, error) {
-	// TODO
-	return nil, nil
-}
-
-type IndexTask struct {
-	url string
-}
-
-func (task IndexTask) Url() string { return task.url }
-func (task IndexTask) Process(page []byte) error {
-	// TODO
-	return nil
-}
-
-/*
-	type IndexWithTotal struct {
-		Total   string     `json:"total"`
-		Replays []Metadata `json:"replays"`
-		When    string     `json:"ts"`
-	}
-	responsebody, err := fetch_index(0)
-	if err != nil {
-		return
-	}
-
-	index := new(IndexWithTotal)
-	err = json.Unmarshal(responsebody, index)
-	if err != nil {
-		// unlikely error
-		return
-	}
-	total, err = strconv.Atoi(index.Total)
-	if err != nil {
-		// very unlikely error
-		return
-	}
-
-	return total, index.Replays
-}
-
-// Fetches the numbered page ; note that page 1 is the first 20 games
-// and pages in the tens-of-thousands are more recent.
-func FetchPage(page_number int) []Metadata {
-	var data []byte
-	var err error
-	if page_number == 0 {
-		// return (cached) latest page
-		// TODO remove after dev
-		data, err = os.ReadFile("../../testdata/index_latest.json")
-		if err != nil {
-			return []Metadata{}
-		}
-	} else {
-		data, err = fetch_index(page_number)
-		if err != nil {
-			return []Metadata{}
-		}
-	}
-
-	var index struct {
-		// ignore other fields, we only care about the list of replays
-		Replays []Metadata `json:"replays"`
-	}
-	err = json.Unmarshal(data, &index)
-	if err != nil {
-		return []Metadata{}
-	}
-
-	return index.Replays
-}
-*/
-
-func (fetch *fetcher) FetchReplay(string) (string, error) {
-	// TODO
-	return "", nil
-}
-
-type ReplayTask struct {
-	url string
-}
-
-func (task ReplayTask) Url() string { return task.url }
-func (task ReplayTask) Process(page []byte) error {
-	// TODO
-	return nil
-}
-
-/*
-func fetch_index(page_number int) ([]byte, error) {
+// Retrieves the data from an OSN index page and provides a channel for new
+// (unique) match replay entries, or a nil channel and non-nil error.
+func FetchIndexPage(pagenum int) ([]osn.LegacyMatch, error) {
 	const URL = "http://osn.codepenguin.com/replays/getReplays/"
 
 	values := url.Values{}
-	if page_number > -1 {
-		values.Add("page", strconv.Itoa(page_number))
+	if pagenum > 0 {
+		values.Add("page", strconv.Itoa(pagenum))
 		values.Add("ret_total", "false")
 	}
 	values.Add("limit", "19")
@@ -163,23 +51,74 @@ func fetch_index(page_number int) ([]byte, error) {
 
 	response, err := http.PostForm(URL, values)
 	if err != nil {
-		return []byte{}, err
+		return []osn.LegacyMatch{}, err
 	}
 	defer response.Body.Close()
-	return io.ReadAll(response.Body)
-}
-*/
-
-/*
-func fetch_replay(match_id string) ([]byte, error) {
-	const URL = "http://osn.codepenguin.com/api/getReplay/"
-	fmt.Printf("Fetching %s\n", URL+match_id)
-
-	response, err := http.Get(URL + match_id)
+	data, err := io.ReadAll(response.Body)
 	if err != nil {
-		return []byte{}, err
+		return []osn.LegacyMatch{}, err
+	}
+
+	var index struct {
+		// ignore other fields, we only care about the list of replays
+		Total   string            `json:"total"`
+		Replays []osn.LegacyMatch `json:"replays"`
+		//When    string            `json:"ts"`
+	}
+	err = json.Unmarshal(data, &index)
+	if err != nil {
+		return []osn.LegacyMatch{}, err
+	}
+
+	return index.Replays, nil
+}
+
+// Retrieves the match with indicated ID and saves it to a local file.
+// Returns the game ID for the replay, or "" and a non-nil error.
+func FetchReplay(game_id osn.GameID, filename string) error {
+	const base_url = "http://osn.codepenguin.com/api/getReplay/"
+	url := base_url + string(game_id)
+
+	log.Print("Fetching ", url, " -> ", filename)
+	response, err := http.Get(url)
+	if err != nil {
+		return err
 	}
 	defer response.Body.Close()
-	return io.ReadAll(response.Body)
+	wire_data, err := io.ReadAll(response.Body)
+	if err != nil {
+		return err
+	}
+
+	_, encoded, err := osn.ParseRawReplay(wire_data)
+	if err != nil {
+		return err
+	}
+
+	os.WriteFile(filename, encoded, 0644)
+	return nil
 }
-*/
+
+//	type IndexWithTotal struct {
+//		Replays []Metadata `json:"replays"`
+//		When    string     `json:"ts"`
+//	}
+//	responsebody, err := fetch_index(0)
+//	if err != nil {
+//		return
+//	}
+//
+//	index := new(IndexWithTotal)
+//	err = json.Unmarshal(responsebody, index)
+//	if err != nil {
+//		// unlikely error
+//		return
+//	}
+//	total, err = strconv.Atoi(index.Total)
+//	if err != nil {
+//		// very unlikely error
+//		return
+//	}
+//
+//	return total, index.Replays
+//}

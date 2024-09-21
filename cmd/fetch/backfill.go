@@ -32,10 +32,11 @@ import (
 	"strings"
 
 	osn "github.com/kevindamm/wits-osn"
+	"github.com/kevindamm/wits-osn/db"
 )
 
 // Backfill the contents of a TSV file into the Sqlite database instance.
-func BackfillFromIndex(witsdb OsnWitsDB, tsv_path string) error {
+func BackfillFromIndex(witsdb db.OsnDB, tsv_path string) error {
 	reader, err := os.Open(tsv_path)
 	if err != nil {
 		return err
@@ -45,7 +46,7 @@ func BackfillFromIndex(witsdb OsnWitsDB, tsv_path string) error {
 	scanner := bufio.NewScanner(reader)
 	scanner.Split(bufio.ScanLines)
 	scanner.Scan()
-	values := strings.Split(scanner.Text(), ", ")
+	values := strings.Split(scanner.Text(), "\t")
 
 	columns := make([]string, 0)
 	for _, col := range values {
@@ -58,16 +59,13 @@ func BackfillFromIndex(witsdb OsnWitsDB, tsv_path string) error {
 	linecount := 0
 	for scanner.Scan() {
 		line := scanner.Text()
+		log.Println(line)
+
 		values = strings.Split(line, "\t")
 		linecount += 1
 		if len(values) != EXPECTED_TSV_COLUMN_COUNT {
-			if linecount >= 1831407 {
-				break
-			}
 			return fmt.Errorf("incorrect column count %d for record, line %d\n%s", len(values), linecount, line)
 		}
-
-		log.Print(strings.Join(values, ", "))
 
 		metadata := osn.LegacyReplayMetadata{
 			GameID:      values[indices["game_id"]],
@@ -75,6 +73,7 @@ func BackfillFromIndex(witsdb OsnWitsDB, tsv_path string) error {
 			LeagueMatch: league_match(values[indices["game_type"]]),
 			Created:     values[indices["created"]],
 			Season:      values[indices["season"]],
+			WitsVersion: values[indices["engine"]],
 			MapID:       values[indices["map_id"]],
 			MapName:     values[indices["map_name"]],
 			TurnCount:   values[indices["turn_count"]],
@@ -99,9 +98,6 @@ func BackfillFromIndex(witsdb OsnWitsDB, tsv_path string) error {
 		metadata.Player2_League = playerLeagues[1]
 		metadata.Player2_Race = playerRaces[1]
 
-		// DEBUG
-		log.Print(metadata)
-
 		if metadata.NumPlayers == "4" {
 			metadata.Player3_Name = playerNames[2]
 			metadata.Player3_ID = playerIDs[2]
@@ -113,6 +109,8 @@ func BackfillFromIndex(witsdb OsnWitsDB, tsv_path string) error {
 			metadata.Player4_League = playerLeagues[3]
 			metadata.Player4_Race = playerRaces[3]
 		}
+
+		log.Println(metadata)
 
 		players := metadata.Players()
 		for _, player := range players {
@@ -131,7 +129,7 @@ func BackfillFromIndex(witsdb OsnWitsDB, tsv_path string) error {
 	return nil
 }
 
-func BackfillFromReplays(witsdb OsnWitsDB, replays_path string) error {
+func BackfillFromReplays(witsdb db.OsnDB, replays_path string) error {
 	// TODO
 
 	return nil
@@ -206,7 +204,7 @@ func league_match(gametype string) string {
 var reListCheck = regexp.MustCompile(`{(.*)(,.*)+}`)
 
 // TODO may need to also handle backquoted quotes?
-var reListItem = regexp.MustCompile(`^("[^"]+"|[^,}]+)[},]`)
+var reListItem = regexp.MustCompile(`^("[^"]+"|[^"][^,}]*)[,}]`)
 
 // Splits a string that is formatted as {...} wrapped comma-separated strings.
 // Elements of the list that contain commas or spaces are wrapped in "-qoutes.
@@ -219,14 +217,14 @@ func split_list(liststr string) []string {
 	if !reListCheck.Match([]byte(liststr)) {
 		return []string{}
 	}
-	// Trim off the `{` ... `}` wrapping braces and convert type to byte slice.
-	items := []byte(liststr[1 : len(liststr)-1])
+	// Start with the first character after the open curly brace `{`.
+	items := []byte(liststr[1:])
 
 	// Parse items incrementally to more clearly avoid the quoted-commas.
 	for reListItem.Match(items) {
-		match := reListItem.FindSubmatchIndex(items)
-		list = append(list, string(liststr[match[0]:match[1]]))
-		items = items[match[1]+1:]
+		match := reListItem.FindIndex(items)
+		list = append(list, string(items[:match[1]-1]))
+		items = items[match[1]:]
 	}
 
 	return list

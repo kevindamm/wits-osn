@@ -25,6 +25,8 @@ package main
 import (
 	"flag"
 	"log"
+
+	"github.com/kevindamm/wits-osn/db"
 )
 
 func main() {
@@ -49,31 +51,40 @@ func main() {
 	//	fmt.Println(string(replayjson))
 	//}
 
-	//replay_example, err := fetch_replay("ag5vdXR3aXR0ZXJzZ2FtZXIQCxIIR2FtZVJvb20Y1pBfDA")
+	//fetcher := NewFetcher()
+	//replay_download, err := fetcher.FetchReplay(replayID)
 	//if err != nil {
 	//	fmt.Println(err)
 	//} else {
-	//	fmt.Println(string(replay_example))
+	//	os.WriteFile(fmt.Sprintf("testdata/%s.json", replayID), replay_download, 0644)
+	//	fmt.Println(string(replay_download))
 	//}
+
 	if *create_tables {
 		log.Println("creating DB tables...")
-		CreateTablesAndClose(*db_path)
+		db.CreateTablesAndClose(*db_path)
 	}
 
-	witsdb := OpenWitsDB(*db_path)
+	witsdb := db.OpenOsnDB(*db_path)
 	defer witsdb.Close()
 
 	if len(*backfill_tsv) > 0 {
 		log.Println("back-filling from legacy DB...")
-		assertNil(BackfillFromIndex(witsdb, *backfill_tsv))
+		assert_nil(BackfillFromIndex(witsdb, *backfill_tsv))
 	}
 	if len(*backfill_replays) > 0 {
 		log.Println("back-filling from legacy replays...")
-		assertNil(BackfillFromReplays(witsdb, *backfill_replays))
+		assert_nil(BackfillFromReplays(witsdb, *backfill_replays))
 	}
 
 	// TODO fetch listing of recent (unaccounted-for) replays
 
 	// TODO fetch replays that haven't been fetched already
 
+}
+
+func assert_nil(err error) {
+	if err != nil {
+		log.Fatal(err)
+	}
 }

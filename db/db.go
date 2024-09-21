@@ -18,9 +18,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-// github:kevindamm/wits-osn/cmd/fetch/db.go
+// github:kevindamm/wits-osn/db/db.go
 
-package main
+package db
 
 import (
 	"database/sql"
@@ -34,7 +34,7 @@ import (
 // Interface for simplifying the interaction with a backing database.
 //
 // DB includes match metadata, map identities, player history and replay index.
-type OsnWitsDB interface {
+type OsnDB interface {
 	Close() // also closes the SqlDB
 
 	InsertPlayer(osn.Player) error
@@ -51,86 +51,76 @@ type OsnWitsDB interface {
 	Match(id string) (osn.LegacyMatch, error)
 }
 
-func assertNil(err error) {
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
 // Opens a Sqlite db at indicated path and prepares queries.
 // Does not create tables, only prepares the connection and statements.
 //
 // Asserts db exists and basic queries can be constructed.
-// LOG(FATAL) on any error but database is not modified.
-func OpenWitsDB(filepath string) OsnWitsDB {
-	witsdb, err := open_database(filepath)
+// LOG(FATAL) on any error, database is returned unmodified.
+func OpenOsnDB(filepath string) OsnDB {
+	osndb, err := open_database(filepath)
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err = witsdb.PrepareQueries(); err != nil {
+	if err = osndb.PrepareQueries(); err != nil {
 		log.Fatal(err)
 	}
-	return OsnWitsDB(witsdb)
+	return OsnDB(osndb)
 }
 
 // Opens a connection to the database but does not prepare any queries.
 //
-// Useful for getting a connection to create the required tables,  Callers from
-// other packages should use OpenWitsDB() or CreateTables(), & WitsDB interface.
-func open_database(filepath string) (*witsdb, error) {
+// Useful for getting a connection to create the required tables, Callers
+// should prefer using [OpenOsnDB()], [CreateTables()], or methods on [OsnDB].
+//
+// Internally, this is used to get a connection without preparing queries (which
+// would fail when required tables had not been created yet).
+func open_database(filepath string) (*osndb, error) {
 	db, err := sql.Open("sqlite3", filepath)
 	if err != nil {
 		return nil, err
 	}
 
-	witsdb := new(witsdb)
-	witsdb.sqldb = db
-	return witsdb, nil
+	osndb := new(osndb)
+	osndb.sqldb = db
+	return osndb, nil
 }
 
 // Prepares [*sql.Stmt] statements for this database interface.
-// (Automatically done if opening the database with [OpenWitsDB()] constructor.)
-func (witsdb *witsdb) PrepareQueries() error {
+// (Automatically done if opening the database with [OpenOsnDB()] constructor.)
+func (osndb *osndb) PrepareQueries() error {
 	var err error = nil
-	db := witsdb.sqldb
+	db := osndb.sqldb
 
-	witsdb.insertPlayer, err = db.Prepare(`INSERT INTO
+	osndb.insertPlayer, err = db.Prepare(`INSERT INTO
 	  players (id, name)
 		VALUES (?, ?)`)
 	if err != nil {
 		return err
 	}
 
-	witsdb.insertPlayerGCID, err = db.Prepare(`INSERT INTO
+	osndb.insertPlayerGCID, err = db.Prepare(`INSERT INTO
 		player_gcid (player_id, gcid)
 		VALUES (?, ?)`)
 	if err != nil {
 		return err
 	}
 
-	witsdb.insertMatch, err = db.Prepare(`INSERT INTO
+	osndb.insertMatch, err = db.Prepare(`INSERT INTO
 		matches (match_hash, competitive, season, start_time,
-		  map_id, turn_count, version, osn_status)
+		  map_id, turn_count, version, status)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
 
-	witsdb.insertMatchIndex, err = db.Prepare(`INSERT INTO
-	  match_order (rowid, match_index)
-		VALUES (?, ?)`)
-	if err != nil {
-		return err
-	}
-
-	witsdb.insertPlayerRole, err = db.Prepare(`INSERT INTO
+	osndb.insertPlayerRole, err = db.Prepare(`INSERT INTO
 	  roles (match_id, player_id, turn_order)
 		VALUES (?, ?, ?);`)
 	if err != nil {
 		return err
 	}
 
-	witsdb.insertStanding, err = db.Prepare(`INSERT INTO
+	osndb.insertStanding, err = db.Prepare(`INSERT INTO
 	  standings (after, player_league, player_rank, player_points, player_delta)
 		VALUES (?, ?, ?, ?, ?)
 	`)
@@ -138,14 +128,14 @@ func (witsdb *witsdb) PrepareQueries() error {
 		return err
 	}
 
-	witsdb.updatePrevStanding, err = db.Prepare(`UPDATE standings
+	osndb.updatePrevStanding, err = db.Prepare(`UPDATE standings
 		SET until = ?
 		WHERE after = ?;`)
 	if err != nil {
 		return err
 	}
 
-	witsdb.selectMaps, err = db.Prepare(`SELECT
+	osndb.selectMaps, err = db.Prepare(`SELECT
 	  map_id, map_name, player_count, map_filename, map_theme, width, height
 	  FROM maps
 		WHERE NOT deprecated`)
@@ -153,21 +143,21 @@ func (witsdb *witsdb) PrepareQueries() error {
 		return err
 	}
 
-	witsdb.selectPlayerByID, err = db.Prepare(`SELECT *
+	osndb.selectPlayerByID, err = db.Prepare(`SELECT *
 	  FROM players
 	  WHERE id = ?;`)
 	if err != nil {
 		return err
 	}
 
-	witsdb.selectPlayerByName, err = db.Prepare(`SELECT *
+	osndb.selectPlayerByName, err = db.Prepare(`SELECT *
 	  FROM players
 	  WHERE name = ?;`)
 	if err != nil {
 		return err
 	}
 
-	witsdb.selectMatches, err = db.Prepare(`SELECT *
+	osndb.selectMatches, err = db.Prepare(`SELECT *
 		FROM matches
 		WHERE match_hash = ?;`)
 	if err != nil {
@@ -177,7 +167,7 @@ func (witsdb *witsdb) PrepareQueries() error {
 	return nil
 }
 
-type witsdb struct {
+type osndb struct {
 	sqldb *sql.DB
 
 	cachedMaps    map[int]osn.Map
@@ -186,7 +176,6 @@ type witsdb struct {
 	insertPlayer       *sql.Stmt
 	insertPlayerGCID   *sql.Stmt
 	insertMatch        *sql.Stmt
-	insertMatchIndex   *sql.Stmt
 	insertPlayerRole   *sql.Stmt
 	insertStanding     *sql.Stmt
 	updatePrevStanding *sql.Stmt
@@ -197,11 +186,11 @@ type witsdb struct {
 	selectMatches      *sql.Stmt
 }
 
-func (db *witsdb) Close() {
+func (db *osndb) Close() {
 	db.sqldb.Close()
 }
 
-func (db *witsdb) Player(id int) (osn.Player, error) {
+func (db *osndb) Player(id int) (osn.Player, error) {
 	if db.cachedPlayers == nil {
 		db.cachedPlayers = make(map[int]osn.Player)
 	}
@@ -228,7 +217,7 @@ func (db *witsdb) Player(id int) (osn.Player, error) {
 	return player, nil
 }
 
-func (db *witsdb) PlayerByName(name string) (osn.Player, error) {
+func (db *osndb) PlayerByName(name string) (osn.Player, error) {
 	player := osn.UNKNOWN_PLAYER
 	row, err := db.selectPlayerByName.Query(name)
 	if err != nil {
@@ -245,7 +234,7 @@ func (db *witsdb) PlayerByName(name string) (osn.Player, error) {
 	return player, nil
 }
 
-func (db *witsdb) InsertPlayer(player osn.Player) error {
+func (db *osndb) InsertPlayer(player osn.Player) error {
 	if _, ok := db.cachedPlayers[player.ID.RowID]; !ok {
 		if db.cachedPlayers == nil {
 			db.cachedPlayers = make(map[int]osn.Player)
@@ -264,12 +253,12 @@ func (db *witsdb) InsertPlayer(player osn.Player) error {
 		}
 	}
 
-	// TODO? detect and insert standings
+	// TODO detect and insert standings
 
 	return nil
 }
 
-func (db *witsdb) AllMaps() ([]osn.Map, error) {
+func (db *osndb) AllMaps() ([]osn.Map, error) {
 	maps := make([]osn.Map, 0)
 	if rows, err := db.selectMaps.Query(); err != nil {
 		return maps, err
@@ -290,7 +279,7 @@ func (db *witsdb) AllMaps() ([]osn.Map, error) {
 	return maps, nil
 }
 
-func (db *witsdb) Map(id int) (osn.Map, error) {
+func (db *osndb) Map(id int) (osn.Map, error) {
 	if len(db.cachedMaps) == 0 {
 		if err := db.cachemaps(); err != nil {
 			return osn.UNKNOWN_MAP, err
@@ -304,7 +293,7 @@ func (db *witsdb) Map(id int) (osn.Map, error) {
 	return mapobj, nil
 }
 
-func (db *witsdb) MapByName(name string) (osn.Map, error) {
+func (db *osndb) MapByName(name string) (osn.Map, error) {
 	if len(db.cachedMaps) == 0 {
 		if err := db.cachemaps(); err != nil {
 			return osn.UNKNOWN_MAP, err
@@ -319,7 +308,7 @@ func (db *witsdb) MapByName(name string) (osn.Map, error) {
 	return osn.UNKNOWN_MAP, fmt.Errorf("unknown map named %s", name)
 }
 
-func (db *witsdb) cachemaps() error {
+func (db *osndb) cachemaps() error {
 	maps, err := db.AllMaps()
 	db.cachedMaps = make(map[int]osn.Map)
 	if err != nil {
@@ -331,18 +320,18 @@ func (db *witsdb) cachemaps() error {
 	return nil
 }
 
-func (db *witsdb) Match(id string) (osn.LegacyMatch, error) {
+func (db *osndb) Match(id string) (osn.LegacyMatch, error) {
 	match := osn.UNKNOWN_MATCH
 
 	return match, nil
 }
 
-func (db *witsdb) InsertMatch(osn.LegacyMatch) error {
-
+func (db *osndb) InsertMatch(osn.LegacyMatch) error {
+	// TODO
 	return nil
 }
 
-func (db *witsdb) InsertStanding(standing osn.PlayerStanding, previous int, current int) error {
+func (db *osndb) InsertStanding(standing osn.PlayerStanding, previous int, current int) error {
 	if _, err := db.insertStanding.Exec(
 		current, standing.League(), standing.Rank(),
 		standing.PointsAfter(), standing.Delta()); err != nil {

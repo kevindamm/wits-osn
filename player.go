@@ -38,9 +38,15 @@ func NewPlayer(id int, name string) Player {
 	return Player{ID: PlayerID{RowID: id}, Name: name}
 }
 
+// Represents an assignment of a Player (identifier) with match participation.
 type PlayerRole struct {
 	Player
-	TurnOrder  int
+	UnitRace    UnitRaceEnum
+	PlayerColor PlayerColorEnum
+
+	AP        int
+	BaseTheme int
+
 	RankBefore PlayerStanding
 	RankAfter  PlayerStanding
 }
@@ -127,3 +133,19 @@ func ParseLeague(str_uint string) LeagueEnum {
 // not included in the replay or index data sent from OSN, and is not relevant
 // enough to the replay analysis to be archived with the replay data.
 type LeagueRank uint8
+
+// This is actually arbitrary but provided for internal consistency.
+type PlayerColorEnum int
+
+const (
+	COLOR_BLUE  PlayerColorEnum = 1
+	COLOR_RED   PlayerColorEnum = 2
+	COLOR_GREEN PlayerColorEnum = 3
+	COLOR_GOLD  PlayerColorEnum = 4
+)
+
+func (color PlayerColorEnum) String() string {
+	return []string{
+		"BLUE", "RED", "GREEN", "GOLD",
+	}[int(color)]
+}

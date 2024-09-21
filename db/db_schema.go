@@ -20,7 +20,7 @@
 //
 // github:kevindamm/wits-osn/cmd/fetch/db_schema.go
 
-package main
+package db
 
 import (
 	"database/sql"
@@ -40,15 +40,15 @@ func CreateTablesAndClose(db_path string) error {
 		// Enumerative relation for unit races.
 		`create TABLE "races" (
       "race_id"    INTEGER PRIMARY KEY,
-      "race_name"  VARCHAR(20) NOT NULL,
-      "hero"       VARCHAR(10) NOT NULL
+      "race_name"  VARCHAR(20) UNIQUE NOT NULL,
+      "hero"       VARCHAR(10) UNIQUE NOT NULL
     ) WITHOUT ROWID;`,
 
 		`INSERT INTO races VALUES
       (1, "Feedback",    "Scrambler"),
       (2, "Adorables",   "Mobi"),
       (3, "Scallywags",  "Bombshell"),
-      (4, "Veggienauts", "Bamble");`,
+      (4, "Veggienauts", "Bramble");`,
 
 		// Enumerative relation for maps, including some additional properties.
 		`CREATE TABLE "maps" (
@@ -93,22 +93,6 @@ func CreateTablesAndClose(db_path string) error {
       (18,     "Mechanism",         4, "mechanism",          1,    13,    13);`,
 		`UPDATE maps set deprecated = true WHERE map_id = 2;`,
 
-		// Enumerative relation for the different races.
-		// Affects unit sprites and available hero unit.
-		`CREATE TABLE "races" (
-      "race_id"    INTEGER PRIMARY KEY,
-      "race_name"  TEXT NOT NULL,
-
-      UNIQUE (race_name) ON CONFLICT IGNORE
-    ) WITHOUT ROWID;`,
-
-		`INSERT INTO races VALUES
-      (0, "UNKNOWN"),
-      (1, "Feedback"),
-      (2, "Adorables"),
-      (3, "Scallywags"),
-      (4, "Veggienauts");`,
-
 		// Enumerative relation for the different ranked leagues.
 		// Players may be promoted or demoted based on win/loss records.
 		`CREATE TABLE "leagues" (
@@ -126,6 +110,23 @@ func CreateTablesAndClose(db_path string) error {
       (4, "Master"),
       (5, "SuperTitan");`,
 
+		`CREATE TABLE "fetch_status" (
+      "id"    INTEGER PRIMARY KEY,
+      "name"  VARCHAR(10) NOT NULL
+    ) WITHOUT ROWID;`,
+
+		`INSERT INTO fetch_status VALUES
+      (0, "UNKNOWN"),
+      (1, "LISTED"),
+      (2, "FETCHED"),
+      (3, "UNWRAPPED"),
+      (4, "CONVERTED"),
+      (5, "CANONICAL"),
+      (6, "VALIDATED"),
+      (7, "INDEXED"),
+      (8, "INVALID"),
+      (9, "LEGACY");`,
+
 		// The player identifier and in-game display name,
 		// used for foreign key relations in replay-related tables.
 		`CREATE TABLE "players" (
@@ -134,6 +135,10 @@ func CreateTablesAndClose(db_path string) error {
     ) WITHOUT ROWID;`,
 
 		`INSERT INTO players (id, name) VALUES (0, "UNKNOWN");`,
+
+		// An index is created to assist lookup of players by name.
+		`CREATE UNIQUE INDEX player_names
+      ON players (name);`,
 
 		// We don't always know the GC:ID (it is revealed in replays),
 		// having it as a separate table affords
@@ -154,28 +159,22 @@ func CreateTablesAndClose(db_path string) error {
 		`CREATE TABLE "matches" (
       -- rowid INTEGER PRIMARY KEY AUTOINCREMENT, -- legacy "id" or Index
       "match_hash"   TEXT NOT NULL UNIQUE,
-      "competitive"  BOOLEAN,   -- league or friendly
-      "season"       INTEGER,   -- seasons are of variable duration
-      "start_time"   TIMESTAMP, -- time at creation, UTC
+      "match_index"  INTEGER,      -- OSN row id
+      "competitive"  BOOLEAN,      -- league or friendly
+      "season"       INTEGER,      -- seasons are of variable duration
+      "start_time"   TIMESTAMP,    -- time at creation, UTC
 
-      "map_id"       INTEGER,   -- MapEnum
-      "turn_count"   INTEGER,   -- number of turns (= one ply) for the match
+      "map_id"       INTEGER,      -- MapEnum
+      "turn_count"   INTEGER,      -- number of turns (= one ply) for the match
 
-      "version"      INTEGER,   -- the runtime version for this match
-      "osn_status"   INTEGER,   -- this match's fetched -> parsed -> converted state
+      "version"      INTEGER,      -- the runtime version for this match
+      "status"       VARCHAR(10),  -- this match's fetch status
 
       FOREIGN KEY (map_id)
         REFERENCES maps (map_id)
-        ON DELETE CASCADE ON UPDATE NO ACTION
-    );`,
-
-		// Because the metadata in the replay listings doesn't include the rowid
-		// from OSN but the replays themselves do, this table helps realign them.
-		`CREATE TABLE "match_order" (
-      -- rowid INTEGER PRIMARY KEY AUTOINCREMENT
-      match_index INTEGER UNIQUE,
-      FOREIGN KEY (match_index)
-        REFERENCES matches (rowid)
+        ON DELETE CASCADE ON UPDATE NO ACTION,
+      FOREIGN KEY (status)
+        REFERENCES fetch_status (name)
         ON DELETE CASCADE ON UPDATE NO ACTION
     );`,
 
@@ -223,7 +222,7 @@ func CreateTablesAndClose(db_path string) error {
         ON DELETE CASCADE ON UPDATE NO ACTION
     );`,
 	} {
-		err := exec(witsdb.sqldb, statement)
+		err := execsql(witsdb.sqldb, statement)
 		if err != nil {
 			log.Println("error when executing SQL statement:")
 			log.Println(statement)
@@ -234,7 +233,7 @@ func CreateTablesAndClose(db_path string) error {
 }
 
 // Convenience function for ad-hoc query execution.
-func exec(db *sql.DB, query string) error {
+func execsql(db *sql.DB, query string) error {
 	stmt, err := db.Prepare(query)
 	if err != nil {
 		return err

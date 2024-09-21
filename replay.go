@@ -37,7 +37,7 @@ type LegacyMatchWithReplay struct {
 // The metadata of a single match between two or four players.
 // Everything but the social signals (views/likes) and replay (player turns).
 type LegacyMatch struct {
-	MatchID     OsnGameID `json:"gameid"`
+	MatchID     GameID    `json:"gameid"`
 	Competitive bool      `json:"competitive"`
 	Season      int       `json:"season"`
 	StartTime   time.Time `json:"created"`
@@ -87,7 +87,7 @@ func ParseRawReplay(filedata []byte) (string, []byte, error) {
 	if err != nil {
 		return on_wire.Wrapper.RoomID, []byte{}, err
 	}
-	if replay.MatchID != OsnGameID(on_wire.Wrapper.RoomID) {
+	if replay.MatchID != GameID(on_wire.Wrapper.RoomID) {
 		log.Printf("found MatchID (%s) different from its room ID (%s)",
 			replay.MatchID, on_wire.Wrapper.RoomID)
 	}

@@ -18,37 +18,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-// github:kevindamm/wits-osn/game_id.go
+// github:kevindamm/wits-osn/hex_coord.go
 
 package osn
 
-import (
-	"encoding/json"
-	"strings"
-)
-
-// Extension of a game's ID which automatically shortens it when marshaling.
-type GameID string
-
-// Marshal the game ID (removing 48-character common prefix all games share).
-func (id GameID) MarshalJSON() ([]byte, error) {
-	// Trim the common prefix off when writing the game ID.
-	return json.Marshal(id.ShortID())
+type HexCoord struct {
+	Column int `json:"positionI"`
+	Row    int `json:"positionJ"`
 }
 
-// Common prefix is overly redundant and does not need to keep taking up space.
-const commonprefix string = "ahRzfm91dHdpdHRlcnNnYW1lLWhyZHIVCxIIR2FtZVJvb20Y"
-
-func (id GameID) ShortID() string {
-	return strings.TrimPrefix(string(id), commonprefix)
-}
-
-func (id *GameID) UnmarshalJSON(encoded []byte) error {
-	// cut off infinite recursion
-	var gameid string
-	if err := json.Unmarshal(encoded, &gameid); err != nil {
-		return err
-	}
-	*id = GameID(gameid)
-	return nil
+func (coord HexCoord) AsVector() []int {
+	return []int{coord.Column, coord.Row}
 }

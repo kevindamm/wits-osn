@@ -20,34 +20,33 @@
 //
 // github:kevindamm/wits-osn/cmd/fetch/db_test.go
 
-package main_test
+package db_test
 
 import (
 	"log"
 	"os"
 	"testing"
 
-	_ "github.com/mattn/go-sqlite3"
-
 	osn "github.com/kevindamm/wits-osn"
-	main "github.com/kevindamm/wits-osn/cmd/fetch"
+	"github.com/kevindamm/wits-osn/db"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func TestDB(t *testing.T) {
-	file, err := os.CreateTemp("", "osnwits-*.db")
+	file, err := os.CreateTemp("", "osn-*.db")
 	if err != nil {
 		t.Errorf("error creating temporary file for DB: %s\n", err)
 	}
 	file.Close()
 
 	// will also create the database that doesn't exist yet
-	err = main.CreateTablesAndClose(file.Name())
+	err = db.CreateTablesAndClose(file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Closing and re-opening the database should still include the tables above.
-	db := main.OpenWitsDB(file.Name())
+	db := db.OpenOsnDB(file.Name())
 
 	mapobj, err := db.Map(1)
 	if err != nil {
@@ -87,7 +86,6 @@ func TestDB(t *testing.T) {
 	check_player(t, db, 2, "2nd")
 
 	metadata := osn.LegacyReplayMetadata{
-		//Index:       "5",
 		GameID:      "ag5vdXR3aXR0ZXJzZ2FtZXIQCxIIR2FtZVJvb20Y9-5HDA",
 		NumPlayers:  "2",
 		LeagueMatch: "1",
@@ -131,7 +129,7 @@ func TestDB(t *testing.T) {
 	check_match(t, db, match)
 }
 
-func check_player(t *testing.T, db main.OsnWitsDB, id int, name string) {
+func check_player(t *testing.T, db db.OsnDB, id int, name string) {
 	player, err := db.Player(id)
 	if err != nil {
 		t.Errorf("error retrieving player (id=%d)\n%s", id, err)
@@ -149,7 +147,7 @@ func check_player(t *testing.T, db main.OsnWitsDB, id int, name string) {
 	}
 }
 
-func check_match(t *testing.T, db main.OsnWitsDB, expected osn.LegacyMatch) {
+func check_match(t *testing.T, db db.OsnDB, expected osn.LegacyMatch) {
 	match, err := db.Match(string(expected.MatchID))
 	if err != nil {
 		t.Errorf("error retrieving match %s\n", match.MatchID)
