@@ -182,17 +182,17 @@ func (metadata *LegacyReplayMetadata) ToLegacyMatch() LegacyMatch {
 		log.Fatalf("metadata has unexpected NumPlayers %s", metadata.NumPlayers)
 	}
 
-	match.Players[0].ID.RowID = assert_int64(metadata.Player1_ID)
+	match.Players[0].RowID = assert_int64(metadata.Player1_ID)
 	match.Players[0].Name = metadata.Player1_Name
 
-	match.Players[1].ID.RowID = assert_int64(metadata.Player2_ID)
+	match.Players[1].RowID = assert_int64(metadata.Player2_ID)
 	match.Players[1].Name = metadata.Player2_Name
 
 	if metadata.NumPlayers == "4" {
-		match.Players[2].ID.RowID = assert_int64(metadata.Player3_ID)
+		match.Players[2].RowID = assert_int64(metadata.Player3_ID)
 		match.Players[2].Name = metadata.Player3_Name
 
-		match.Players[3].ID.RowID = assert_int64(metadata.Player4_ID)
+		match.Players[3].RowID = assert_int64(metadata.Player4_ID)
 		match.Players[3].Name = metadata.Player4_Name
 	}
 
@@ -219,4 +219,38 @@ func assert_int64(image string) int64 {
 		log.Fatalf("unexpected string value for int64: %s", image)
 	}
 	return value
+}
+
+// Enumeration of race; determines special unit and affects visual appearance.
+// Satisfies Resource[RaceEnum] for inclusion in database tables.
+type RaceEnum uint8
+
+const (
+	RACE_UNKNOWN RaceEnum = iota
+	RACE_FEEDBACK
+	RACE_ADORABLES
+	RACE_SCALLYWAGS
+	RACE_VEGGIENAUTS
+)
+
+type Race struct {
+	RaceEnum `orm:"rowid"`
+	Name     string `orm:"name!Unknown,unique"`
+	Special  string `orm:"special!"`
+}
+
+func (race Race) String() string {
+	return race.Name
+}
+
+func (race Race) MarshalJSON() ([]byte, error) {
+	return json.Marshal(int(race.RaceEnum))
+}
+
+var Races [5]Race = [5]Race{
+	{RACE_UNKNOWN, "Unknown", "Unknown"},
+	{RACE_FEEDBACK, "Feedback", "Scrambler"},
+	{RACE_ADORABLES, "Adorables", "Mobi"},
+	{RACE_SCALLYWAGS, "Scallywags", "Bombshell"},
+	{RACE_VEGGIENAUTS, "Veggienauts", "Bramble"},
 }

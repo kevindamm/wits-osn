@@ -77,3 +77,18 @@ func ParseRawReplay(filedata []byte) (string, []byte, error) {
 	bytes, err := json.Marshal(replay)
 	return on_wire.Wrapper.RoomID, bytes, err
 }
+
+type FetchStatus int8
+
+const (
+	STATUS_UNKNOWN FetchStatus = iota
+	STATUS_LISTED
+	STATUS_FETCHED
+	STATUS_UNWRAPPED
+	STATUS_CONVERTED
+	STATUS_CANONICAL
+	STATUS_VALIDATED
+	STATUS_INDEXED
+	STATUS_INVALID
+	STATUS_LEGACY
+)

@@ -61,10 +61,6 @@ type fetcher struct {
 	fetch_replay func(pageurl string) ([]byte, error)
 }
 
-func (fetcher *fetcher) wait() {
-
-}
-
 func (fetcher *fetcher) FetchNewReplayIDs(db db.OsnDB) (<-chan osn.GameID, <-chan error) {
 	errchan := make(chan error)
 	idchan := make(chan osn.GameID)

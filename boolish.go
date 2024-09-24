@@ -59,12 +59,14 @@ func (b Boolish) MarshalJSON() ([]byte, error) {
 	return json.Marshal(bool(b))
 }
 
+// Similar to the conversion rules above but any non-{0|1} integer is an error,
+// this and string conversion are consistent with [driver.Bool] translation.
 func (b *Boolish) Scan(value interface{}) error {
 	if value == nil {
 		*b = Boolish(false)
 		return nil
 	}
-	if boolValue, err := driver.Bool.ConvertValue(b); err == nil {
+	if boolValue, err := driver.Bool.ConvertValue(value); err == nil {
 		if v, ok := boolValue.(bool); ok {
 			*b = Boolish(v)
 			return nil

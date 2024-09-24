@@ -71,12 +71,12 @@ func TestDB(t *testing.T) {
 	}
 
 	err = db.InsertPlayer(&osn.Player{
-		ID: osn.PlayerID{RowID: 1, GCID: "abcde"}, Name: "First"})
+		RowID: 1, GCID: "abcde", Name: "First"})
 	if err != nil {
 		t.Error(err)
 	}
 	err = db.InsertPlayer(&osn.Player{
-		ID: osn.PlayerID{RowID: 2, GCID: "bcdef"}, Name: "2nd"})
+		RowID: 2, GCID: "bcdef", Name: "2nd"})
 	if err != nil {
 		t.Error(err)
 	}
@@ -140,8 +140,8 @@ func check_player(t *testing.T, db db.OsnDB, id int64, name string) {
 	if err != nil {
 		t.Errorf("error retrieving player (name=%s)\n%s", name, err)
 	}
-	if player.ID.RowID != id {
-		t.Errorf("incorrect ID for player (name=%s): %d", name, player.ID.RowID)
+	if player.RowID != id {
+		t.Errorf("incorrect ID for player (name=%s): %d", name, player.RowID)
 	}
 }
 
@@ -189,8 +189,8 @@ func check_match(t *testing.T, db db.OsnDB, expected osn.LegacyMatch) {
 		return
 	}
 	for i, player := range match.Players {
-		if player.ID.RowID != expected.Players[i].ID.RowID {
-			t.Errorf("player %d ID %d != expected %d", i, player.ID.RowID, expected.Players[i].ID.RowID)
+		if player.RowID != expected.Players[i].RowID {
+			t.Errorf("player %d ID %d != expected %d", i, player.RowID, expected.Players[i].RowID)
 		}
 		// TODO BUGFIX when ordering is swapped (refer to "first_playerid" in metadata)
 		//if player.Name != expected.Players[i].Name {

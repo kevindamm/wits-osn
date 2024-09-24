@@ -29,38 +29,33 @@ import (
 )
 
 type Player struct {
-	ID   PlayerID
-	Name string
+	RowID int64  `json:"-" orm:"rowid,pk"`
+	GCID  string `json:"gcid,omitempty" orm:"gcid?,unique"`
+	Name  string `json:"name" orm:"name!Unknown,unique"`
 }
 
 // Simple (no GCID) constructor for a Player instance.
 func NewPlayer(id int64, name string) Player {
-	return Player{ID: PlayerID{RowID: id}, Name: name}
+	return Player{RowID: id, GCID: "", Name: name}
+}
+
+var UNKNOWN_PLAYER Player = Player{
+	RowID: 0,
+	GCID:  "",
+	Name:  "",
 }
 
 // Represents an assignment of a Player (identifier) with match participation.
 type PlayerRole struct {
-	Player
-	UnitRace    UnitRaceEnum
-	PlayerColor PlayerColorEnum
+	Player    `json:"player" orm:"fk(players)"`
+	UnitRace  RaceEnum        `orm:"fk(races)"`
+	BaseTheme int             `json:"theme"`
+	TurnOrder PlayerColorEnum `orm:"turn_order"`
 
-	AP        int
-	BaseTheme int
+	AP int `json:"wits"`
 
-	RankBefore PlayerStanding
-	RankAfter  PlayerStanding
-}
-
-// Represents both (or either of) the internal identity and the player's GCID.
-// A zero value for either one will indicate missing or unknown value.
-type PlayerID struct {
-	RowID int64
-	GCID  string
-}
-
-var UNKNOWN_PLAYER Player = Player{
-	ID:   PlayerID{RowID: 0, GCID: ""},
-	Name: "",
+	RankBefore PlayerStanding `json:"rank_prev" orm:"rank_until=fk(standings)"`
+	RankAfter  PlayerStanding `json:"rank_next,omitempty" orm:"rank_after=fk(standings)"`
 }
 
 // An ELO-like measurement and a current league + standings.

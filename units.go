@@ -21,33 +21,3 @@
 // github:kevindamm/wits-osn/units.go
 
 package osn
-
-import "encoding/json"
-
-// OSN enumeration of the different squads a player can choose from.
-type UnitRaceEnum byte
-
-const (
-	RACE_UNKNOWN UnitRaceEnum = iota
-	RACE_FEEDBACK
-	RACE_ADORABLES
-	RACE_SCALLYWAGS
-	RACE_VEGGIENAUTS
-)
-
-func (race UnitRaceEnum) String() string {
-	if race > RACE_VEGGIENAUTS {
-		race = RACE_UNKNOWN
-	}
-	return []string{
-		"UNKNOWN",
-		"FEEDBACK",
-		"ADORABLES",
-		"SCALLYWAGS",
-		"VEGGIENAUTS",
-	}[int(race)]
-}
-
-func (race UnitRaceEnum) MarshalJSON() ([]byte, error) {
-	return json.Marshal(int(race))
-}

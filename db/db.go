@@ -35,7 +35,7 @@ import (
 //
 // DB includes match metadata, map identities, player history and replay index.
 type OsnDB interface {
-	Close() // also closes the SqlDB
+	Close() // also closes the SqlDB and any prepared statements
 
 	InsertPlayer(*osn.Player) error
 	InsertMatch(*osn.LegacyMatch) error
@@ -98,9 +98,9 @@ func (osndb *osndb) PrepareQueries() error {
 		return err
 	}
 
-	osndb.insertPlayerGCID, err = db.Prepare(`INSERT INTO
-		player_gcid (player_id, gcid)
-		VALUES (?, ?)`)
+	osndb.insertPlayerGCID, err = db.Prepare(`UPDATE players
+		SET gcid = ?
+		WHERE id = ?;`)
 	if err != nil {
 		return err
 	}
@@ -131,14 +131,6 @@ func (osndb *osndb) PrepareQueries() error {
 	osndb.updatePrevStanding, err = db.Prepare(`UPDATE standings
 		SET until = ?
 		WHERE after = ?;`)
-	if err != nil {
-		return err
-	}
-
-	osndb.selectMaps, err = db.Prepare(`SELECT
-	  map_id, map_name, player_count, map_filename, map_theme, width, height
-	  FROM maps
-		WHERE NOT deprecated`)
 	if err != nil {
 		return err
 	}
@@ -189,7 +181,6 @@ type osndb struct {
 	insertStanding     *sql.Stmt
 	updatePrevStanding *sql.Stmt
 
-	selectMaps          *sql.Stmt
 	selectPlayerByID    *sql.Stmt
 	selectPlayerByName  *sql.Stmt
 	selectMatchByHash   *sql.Stmt
@@ -214,9 +205,6 @@ func (db *osndb) Close() {
 	}
 	if db.updatePrevStanding != nil {
 		db.updatePrevStanding.Close()
-	}
-	if db.selectMaps != nil {
-		db.selectMaps.Close()
 	}
 	if db.selectPlayerByID != nil {
 		db.selectPlayerByID.Close()
@@ -252,7 +240,7 @@ func (db *osndb) Player(id int64) (osn.Player, error) {
 	}
 
 	player := osn.Player{}
-	err = row.Scan(&player.ID.RowID, &player.Name)
+	err = row.Scan(&player.RowID, &player.Name)
 	if err != nil {
 		return player, err
 	}
@@ -273,7 +261,7 @@ func (db *osndb) PlayerByName(name string) (osn.Player, error) {
 		return player, fmt.Errorf("no player with name %s", name)
 	}
 
-	err = row.Scan(&player.ID.RowID, &player.Name)
+	err = row.Scan(&player.RowID, &player.GCID, &player.Name)
 	if err != nil {
 		return player, err
 	}
@@ -281,55 +269,32 @@ func (db *osndb) PlayerByName(name string) (osn.Player, error) {
 }
 
 func (db *osndb) InsertPlayer(player *osn.Player) error {
-	if _, ok := db.cachedPlayers[player.ID.RowID]; !ok {
-		if db.cachedPlayers == nil {
-			db.cachedPlayers = make(map[int64]osn.Player)
-		}
-		result, err := db.insertPlayer.Exec(player.ID.RowID, player.Name)
+	if db.cachedPlayers == nil {
+		db.cachedPlayers = make(map[int64]osn.Player)
+	}
+	if _, ok := db.cachedPlayers[player.RowID]; !ok {
+		result, err := db.insertPlayer.Exec(player.RowID, player.Name)
 		if err != nil {
 			return err
 		}
-		db.cachedPlayers[player.ID.RowID] = *player
-		if player.ID.RowID == 0 {
+		db.cachedPlayers[player.RowID] = *player
+		if player.RowID == 0 {
 			playerID, err := result.LastInsertId()
 			if err != nil {
 				return err
 			}
-			player.ID.RowID = playerID
+			player.RowID = playerID
 		}
 	}
 
-	if player.ID.GCID != "" {
-		_, err := db.insertPlayerGCID.Exec(player.ID.RowID, player.ID.GCID)
+	if player.GCID != "" {
+		_, err := db.insertPlayerGCID.Exec(player.GCID, player.RowID)
 		if err != nil {
 			return err
 		}
 	}
 
-	// TODO detect and insert standings
-
 	return nil
-}
-
-func (db *osndb) AllMaps() ([]osn.Map, error) {
-	maps := make([]osn.Map, 0)
-	rows, err := db.selectMaps.Query()
-	if err != nil {
-		return maps, err
-	}
-	defer rows.Close()
-
-	mapobj := osn.Map{}
-	for rows.Next() {
-		// map_id, map_name, player_count, map_filename, map_theme, width, height
-		rows.Scan(
-			&mapobj.MapID, &mapobj.Name, &mapobj.PlayerCount,
-			&mapobj.Filename, &mapobj.Theme,
-			&mapobj.Width, &mapobj.Height)
-		maps = append(maps, mapobj)
-	}
-
-	return maps, nil
 }
 
 func (db *osndb) Map(id int8) (osn.Map, error) {
@@ -399,7 +364,7 @@ func (db *osndb) MatchByHash(hash string) (osn.LegacyMatch, error) {
 		return match, err
 	}
 	if match.Version != 1603 {
-		match.Status = int(STATUS_LEGACY)
+		match.Status = int(osn.STATUS_LEGACY)
 		return match, fmt.Errorf("engine version %d is deprecated", match.Version)
 	}
 
@@ -425,12 +390,12 @@ func (db *osndb) MatchByHash(hash string) (osn.LegacyMatch, error) {
 	} else if len(roles) <= 2 {
 		match.Players = make([]osn.Player, 2)
 		for _, role := range roles {
-			match.Players[role.TurnOrder-1].ID.RowID = role.PlayerID
+			match.Players[role.TurnOrder-1].RowID = role.PlayerID
 		}
 	} else if len(roles) <= 4 {
 		match.Players = make([]osn.Player, 4)
 		for _, role := range roles {
-			match.Players[role.TurnOrder-1].ID.RowID = role.PlayerID
+			match.Players[role.TurnOrder-1].RowID = role.PlayerID
 		}
 	} else {
 		return osn.UNKNOWN_MATCH, fmt.Errorf("too many roles for match %s", hash)
@@ -462,7 +427,7 @@ func (db *osndb) InsertMatch(match *osn.LegacyMatch) error {
 	log.Printf("%d players", len(match.Players))
 	for order, role := range match.Players {
 		if _, err := db.insertPlayerRole.Exec(
-			id, role.ID.RowID, order+1); err != nil {
+			id, role.RowID, order+1); err != nil {
 			tx.Rollback()
 			return err
 		}
