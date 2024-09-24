@@ -18,11 +18,42 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-// github:kevindamm/wits-osn/replay.go
+// github:kevindamm/wits-osn/match.go
 
 package osn
 
-import "strconv"
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"strconv"
+	"time"
+)
+
+// The metadata of a single match between two or four players.
+// Everything but the social signals (views/likes) and replay (player turns).
+type LegacyMatch struct {
+	MatchIndex  int64     `json:"-"`
+	MatchHash   GameID    `json:"gameid"`
+	OsnIndex    int       `json:"id,omitempty"`
+	Competitive bool      `json:"competitive"`
+	Season      int       `json:"season"`
+	StartTime   time.Time `json:"created"`
+	MapID       int       `json:"mapid"`
+	TurnCount   int       `json:"turn_count"`
+
+	Version int `json:"engine"`
+	Status  int `json:"-"`
+
+	Players []Player `json:"players,omitempty"`
+	First   string   `json:"first_playerid,omitempty"`
+}
+
+const UNKNOWN_MATCH_ID = GameID("")
+
+var UNKNOWN_MATCH LegacyMatch = LegacyMatch{
+	MatchHash: UNKNOWN_MATCH_ID,
+}
 
 // The (unaltered) representation of match-related metadata from OSN.
 //
@@ -37,10 +68,10 @@ type LegacyReplayMetadata struct {
 	Season      string `json:"season"`        // integer ("1")
 
 	// Runtime is parameterized by engine version and map definition.
-	WitsVersion string `json:"engine"`     // integer #=< 1063, ("1000" is v1)
-	MapID       string `json:"mapid"`      // relates to indexed maps, (id "4")
-	MapName     string `json:"map_title"`  // display name ("Glitch"), redundant
-	MapTheme    string `json:"map_raceid"` // enumeration, e.g. "1" is Feedback
+	OsnVersion string `json:"engine"`     // integer #=< 1063, ("1000" is v1)
+	MapID      string `json:"mapid"`      // relates to indexed maps, (id "4")
+	MapName    string `json:"map_title"`  // display name ("Glitch"), redundant
+	MapTheme   string `json:"map_raceid"` // enumeration, e.g. "1" is Feedback
 
 	// These aren't persisted in the database but appear in the OSN index.
 	TurnCount string `json:"turn_count"` // integer "34"
@@ -86,14 +117,14 @@ func (metadata *LegacyReplayMetadata) Players() []Player {
 	players := make([]Player, numPlayers)
 
 	if numPlayers == 2 || numPlayers == 4 {
-		playerRowID, err := strconv.Atoi(metadata.Player1_ID)
+		playerRowID, err := strconv.ParseInt(metadata.Player1_ID, 10, 64)
 		if err == nil {
 			players[0] = NewPlayer(playerRowID, metadata.Player1_Name)
 		} else {
 			players[0] = UNKNOWN_PLAYER
 		}
 
-		playerRowID, err = strconv.Atoi(metadata.Player2_ID)
+		playerRowID, err = strconv.ParseInt(metadata.Player2_ID, 10, 64)
 		if err == nil {
 			players[1] = NewPlayer(playerRowID, metadata.Player2_Name)
 		} else {
@@ -101,14 +132,14 @@ func (metadata *LegacyReplayMetadata) Players() []Player {
 		}
 	}
 	if numPlayers == 4 {
-		playerRowID, err := strconv.Atoi(metadata.Player3_ID)
+		playerRowID, err := strconv.ParseInt(metadata.Player3_ID, 10, 64)
 		if err == nil {
 			players[2] = NewPlayer(playerRowID, metadata.Player3_Name)
 		} else {
 			players[2] = UNKNOWN_PLAYER
 		}
 
-		playerRowID, err = strconv.Atoi(metadata.Player4_ID)
+		playerRowID, err = strconv.ParseInt(metadata.Player4_ID, 10, 64)
 		if err == nil {
 			players[3] = NewPlayer(playerRowID, metadata.Player4_Name)
 		} else {
@@ -118,8 +149,74 @@ func (metadata *LegacyReplayMetadata) Players() []Player {
 	return players
 }
 
+// For go's [time.Parse] this must always be this same date and time.
+const TimeLayout = "2006-01-02 15:04:05"
+
 func (metadata *LegacyReplayMetadata) ToLegacyMatch() LegacyMatch {
-	match := LegacyMatch{}
+	index := int64(0)
+	if metadata.Index != "" {
+		index = assert_int64(metadata.Index)
+	}
+
+	time, err := time.Parse(TimeLayout, metadata.Created)
+	if err != nil {
+		log.Fatalf("timestamp is not in expected format: %s", metadata.Created)
+	}
+
+	match := LegacyMatch{
+		MatchIndex:  index,
+		MatchHash:   GameID(metadata.GameID),
+		OsnIndex:    int(index),
+		Competitive: metadata.LeagueMatch == "1",
+		Season:      int(assert_int64(metadata.Season)),
+		StartTime:   time,
+		MapID:       int(assert_int64(metadata.MapID)),
+		TurnCount:   int(assert_int64(metadata.TurnCount)),
+		Version:     int(assert_int64(metadata.OsnVersion)),
+	}
+	if metadata.NumPlayers == "4" {
+		match.Players = make([]Player, 4)
+	} else if metadata.NumPlayers == "2" {
+		match.Players = make([]Player, 2)
+	} else {
+		log.Fatalf("metadata has unexpected NumPlayers %s", metadata.NumPlayers)
+	}
+
+	match.Players[0].ID.RowID = assert_int64(metadata.Player1_ID)
+	match.Players[0].Name = metadata.Player1_Name
+
+	match.Players[1].ID.RowID = assert_int64(metadata.Player2_ID)
+	match.Players[1].Name = metadata.Player2_Name
+
+	if metadata.NumPlayers == "4" {
+		match.Players[2].ID.RowID = assert_int64(metadata.Player3_ID)
+		match.Players[2].Name = metadata.Player3_Name
+
+		match.Players[3].ID.RowID = assert_int64(metadata.Player4_ID)
+		match.Players[3].Name = metadata.Player4_Name
+	}
 
 	return match
+}
+
+// Emits the JSON representation as well as the ID value which is typically not
+// part of the JSON payload.  Useful for debugging, but the rowid `id` value is
+// transient, it may change at the next VACUUM or repartitioning.
+func (metadata LegacyReplayMetadata) String() string {
+	if properties, err := json.Marshal(metadata); err == nil {
+		return fmt.Sprintf("{ id: %s (%s),\n%s",
+			metadata.Index, metadata.GameID,
+			properties)
+	} else {
+		log.Printf("failed to marshal metadata (id: %s)\n%s", metadata.Index, err)
+	}
+	return metadata.Index
+}
+
+func assert_int64(image string) int64 {
+	value, err := strconv.ParseInt(image, 10, 64)
+	if err != nil {
+		log.Fatalf("unexpected string value for int64: %s", image)
+	}
+	return value
 }

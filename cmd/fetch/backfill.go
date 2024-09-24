@@ -73,12 +73,12 @@ func BackfillFromIndex(witsdb db.OsnDB, tsv_path string) error {
 			LeagueMatch: league_match(values[indices["game_type"]]),
 			Created:     values[indices["created"]],
 			Season:      values[indices["season"]],
-			WitsVersion: values[indices["engine"]],
+			OsnVersion:  values[indices["engine"]],
 			MapID:       values[indices["map_id"]],
 			MapName:     values[indices["map_name"]],
 			TurnCount:   values[indices["turn_count"]],
 		}
-		_, err := witsdb.Map(assert_int(values[indices["map_id"]]))
+		_, err := witsdb.Map(assert_int8(values[indices["map_id"]]))
 		if err != nil {
 			return err
 		}
@@ -114,11 +114,11 @@ func BackfillFromIndex(witsdb db.OsnDB, tsv_path string) error {
 
 		players := metadata.Players()
 		for _, player := range players {
-			witsdb.InsertPlayer(player)
+			witsdb.InsertPlayer(&player)
 		}
 
 		match := metadata.ToLegacyMatch()
-		witsdb.InsertMatch(match)
+		witsdb.InsertMatch(&match)
 
 		if true {
 			// TODO only processing one record until the schema transform is complete
@@ -177,12 +177,12 @@ func verify_columns(columns []string) map[string]int {
 }
 
 // Convert string into an integer or fail with LOG(FATAL) << error.
-func assert_int(intstr string) int {
-	value, err := strconv.Atoi(intstr)
+func assert_int8(intstr string) int8 {
+	value64, err := strconv.ParseInt(intstr, 10, 8)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return value
+	return int8(value64)
 }
 
 func num_players(gametype string) string {
@@ -194,7 +194,7 @@ func num_players(gametype string) string {
 }
 
 func league_match(gametype string) string {
-	gametypeint := assert_int(gametype)
+	gametypeint := assert_int8(gametype)
 	if gametypeint%2 > 0 {
 		return "1"
 	}

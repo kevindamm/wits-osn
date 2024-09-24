@@ -34,7 +34,7 @@ type Player struct {
 }
 
 // Simple (no GCID) constructor for a Player instance.
-func NewPlayer(id int, name string) Player {
+func NewPlayer(id int64, name string) Player {
 	return Player{ID: PlayerID{RowID: id}, Name: name}
 }
 
@@ -54,7 +54,7 @@ type PlayerRole struct {
 // Represents both (or either of) the internal identity and the player's GCID.
 // A zero value for either one will indicate missing or unknown value.
 type PlayerID struct {
-	RowID int
+	RowID int64
 	GCID  string
 }
 

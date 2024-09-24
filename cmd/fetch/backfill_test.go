@@ -18,31 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-// github:kevindamm/wits-osn/map.go
+// github:kevindamm/wits-osn/cmd/fetch/backfill_test.go
 
-package osn
-
-// DEPRECATED wip migrating to db/maps.go
-
-type Map struct {
-	MapID int8   `json:"map_id"`
-	Name  string `json:"name"`
-
-	// uses a player count of 0 for a deprecated map
-	PlayerCount int
-
-	MapDetails
-}
-
-type MapDetails struct {
-	Filename string `json:"-"`
-	Theme    int    `json:"map_theme"`
-	Terrain  []byte `json:"terrain,omitempty"`
-	Units    []byte `json:"units,omitempty"`
-	Width    int    `json:"columns"`
-	Height   int    `json:"rows"`
-}
-
-func UnknownMap() Map {
-	return Map{0, "UNKNOWN", 0, MapDetails{Filename: ""}}
-}
+package main_test

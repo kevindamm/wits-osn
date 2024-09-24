@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-// github:kevindamm/wits-osn/cmd/fetch/db_test.go
+// github:kevindamm/wits-osn/db/db_test.go
 
 package db_test
 
@@ -65,18 +65,17 @@ func TestDB(t *testing.T) {
 	if err != nil {
 		t.Errorf("MapNames() error: %s\n", err)
 	} else {
-		t.Logf("maps: %v", maps)
 		if len(maps) != 17 {
-			t.Errorf("retrieved unexpected number of maps %d", len(maps))
+			t.Errorf("retrieved unexpected number of maps %d\n%v", len(maps), maps)
 		}
 	}
 
-	err = db.InsertPlayer(osn.Player{
+	err = db.InsertPlayer(&osn.Player{
 		ID: osn.PlayerID{RowID: 1, GCID: "abcde"}, Name: "First"})
 	if err != nil {
 		t.Error(err)
 	}
-	err = db.InsertPlayer(osn.Player{
+	err = db.InsertPlayer(&osn.Player{
 		ID: osn.PlayerID{RowID: 2, GCID: "bcdef"}, Name: "2nd"})
 	if err != nil {
 		t.Error(err)
@@ -89,13 +88,13 @@ func TestDB(t *testing.T) {
 		GameID:      "ag5vdXR3aXR0ZXJzZ2FtZXIQCxIIR2FtZVJvb20Y9-5HDA",
 		NumPlayers:  "2",
 		LeagueMatch: "1",
-		Created:     "",
+		Created:     "2012-08-05 15:14:31",
 		Season:      "1",
 
-		WitsVersion: "1000",
-		MapID:       "7",
-		MapName:     "Peekaboo",
-		MapTheme:    "2",
+		OsnVersion: "1603",
+		MapID:      "7",
+		MapName:    "Peekaboo",
+		MapTheme:   "2",
 
 		TurnCount: "25",
 		ViewCount: "35",
@@ -117,19 +116,18 @@ func TestDB(t *testing.T) {
 
 		FirstPlayer: "3",
 	}
-	log.Print(metadata)
 
 	match := metadata.ToLegacyMatch()
-
-	err = db.InsertMatch(match)
+	err = db.InsertMatch(&match)
 	if err != nil {
 		t.Errorf("error when inserting match metadata:\n%s", err)
 	}
 
+	log.Print(metadata, " => ", match)
 	check_match(t, db, match)
 }
 
-func check_player(t *testing.T, db db.OsnDB, id int, name string) {
+func check_player(t *testing.T, db db.OsnDB, id int64, name string) {
 	player, err := db.Player(id)
 	if err != nil {
 		t.Errorf("error retrieving player (id=%d)\n%s", id, err)
@@ -148,14 +146,18 @@ func check_player(t *testing.T, db db.OsnDB, id int, name string) {
 }
 
 func check_match(t *testing.T, db db.OsnDB, expected osn.LegacyMatch) {
-	match, err := db.Match(string(expected.MatchID))
+	match, err := db.MatchByHash(string(expected.MatchHash))
 	if err != nil {
-		t.Errorf("error retrieving match %s\n", match.MatchID)
+		t.Errorf("error retrieving match %s\n%s\n", match.MatchHash, err)
 	}
 
-	if match.MatchID != expected.MatchID {
+	if match.MatchIndex != expected.MatchIndex {
+		t.Errorf("match index incorrect; got %d (expected %d)",
+			match.MatchIndex, expected.MatchIndex)
+	}
+	if match.MatchHash != expected.MatchHash {
 		t.Errorf("match ID incorrect; got %s (expected %s)",
-			match.MatchID, expected.MatchID)
+			match.MatchHash, expected.MatchHash)
 	}
 	if match.Competitive != expected.Competitive {
 		t.Errorf("competitive %v != expected.competitive %v", match.Competitive, expected.Competitive)
@@ -174,4 +176,25 @@ func check_match(t *testing.T, db db.OsnDB, expected osn.LegacyMatch) {
 		t.Errorf("turn_count %d != expected.turn_count %d", match.TurnCount, expected.TurnCount)
 	}
 
+	if match.Version != expected.Version {
+		t.Errorf("version %d != expected.version %d", match.Version, expected.Version)
+	}
+	if match.Status != expected.Status {
+		t.Errorf("status %d != expected.status %d", match.Status, expected.Status)
+	}
+
+	if len(match.Players) != len(expected.Players) {
+		t.Errorf("number of players %d != expected %d",
+			len(match.Players), len(expected.Players))
+		return
+	}
+	for i, player := range match.Players {
+		if player.ID.RowID != expected.Players[i].ID.RowID {
+			t.Errorf("player %d ID %d != expected %d", i, player.ID.RowID, expected.Players[i].ID.RowID)
+		}
+		// TODO BUGFIX when ordering is swapped (refer to "first_playerid" in metadata)
+		//if player.Name != expected.Players[i].Name {
+		//	t.Errorf("player %d Name %s != expected %s", i, player.Name, expected.Players[i].Name)
+		//}
+	}
 }

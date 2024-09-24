@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-// github:kevindamm/wits-osn/cmd/fetch/db_schema.go
+// github:kevindamm/wits-osn/db/schema.go
 
 package db
 
@@ -28,6 +28,32 @@ import (
 	"log"
 )
 
+// Abstraction over one or more tables, representing an atomic structural type.
+//
+// Some are defined in `base.go` (Maps, Leagues, Races, etc.) while others are
+// defined in the files associated with their type (Player, Match, Replay...).
+type Resource interface {
+	Name() string
+	CreateAndInitSql(db *sql.DB) error
+	SqlGet(db *sql.DB, id int64) error
+
+	ScanRecord(*sql.Row) error
+	Columns() []string
+	//Values() []sql.ColumnType
+	//Subset([]string) []sql.ColumnType
+}
+
+func create_base_tables(db *osndb) error {
+	if err := RACE_UNKNOWN.CreateAndInitSql(db.sqldb); err != nil {
+		return err
+	}
+	//FetchStatus(0),
+	//LeagueEnum(""),
+	//LegacyMap{},
+
+	return nil
+}
+
 // Only needs to be called once at table setup.  Also closes the database.
 func CreateTablesAndClose(db_path string) error {
 	witsdb, err := open_database(db_path)
@@ -36,20 +62,9 @@ func CreateTablesAndClose(db_path string) error {
 	}
 	defer witsdb.Close()
 
+	create_base_tables(witsdb)
+
 	for _, statement := range []string{
-		// Enumerative relation for unit races.
-		`create TABLE "races" (
-      "race_id"    INTEGER PRIMARY KEY,
-      "race_name"  VARCHAR(20) UNIQUE NOT NULL,
-      "hero"       VARCHAR(10) UNIQUE NOT NULL
-    ) WITHOUT ROWID;`,
-
-		`INSERT INTO races VALUES
-      (1, "Feedback",    "Scrambler"),
-      (2, "Adorables",   "Mobi"),
-      (3, "Scallywags",  "Bombshell"),
-      (4, "Veggienauts", "Bramble");`,
-
 		// Enumerative relation for maps, including some additional properties.
 		`CREATE TABLE "maps" (
       "map_id"        INTEGER PRIMARY KEY,
@@ -159,24 +174,26 @@ func CreateTablesAndClose(db_path string) error {
 		`CREATE TABLE "matches" (
       -- rowid INTEGER PRIMARY KEY AUTOINCREMENT, -- legacy "id" or Index
       "match_hash"   TEXT NOT NULL UNIQUE,
-      "match_index"  INTEGER,      -- OSN row id
-      "competitive"  BOOLEAN,      -- league or friendly
-      "season"       INTEGER,      -- seasons are of variable duration
-      "start_time"   TIMESTAMP,    -- time at creation, UTC
+      "competitive"  BOOLEAN,    -- league or friendly
+      "season"       INTEGER,    -- seasons are of variable duration
+      "start_time"   TIMESTAMP,  -- time at creation, UTC
 
-      "map_id"       INTEGER,      -- MapEnum
-      "turn_count"   INTEGER,      -- number of turns (= one ply) for the match
+      "map_id"       INTEGER,    -- MapEnum
+      "turn_count"   INTEGER,    -- number of turns (= one ply) for the match
 
-      "version"      INTEGER,      -- the runtime version for this match
-      "status"       VARCHAR(10),  -- this match's fetch status
+      "version"      INTEGER,    -- engine (runtime) version for this match
+      "status"       INTEGER,    -- this match's fetch_status
 
       FOREIGN KEY (map_id)
         REFERENCES maps (map_id)
         ON DELETE CASCADE ON UPDATE NO ACTION,
       FOREIGN KEY (status)
-        REFERENCES fetch_status (name)
+        REFERENCES fetch_status (id)
         ON DELETE CASCADE ON UPDATE NO ACTION
     );`,
+
+		`CREATE UNIQUE INDEX match_hashes
+      ON matches (match_hash);`,
 
 		// Relation for which players are participating in which matches,
 		// and the turn order they are assigned to.
