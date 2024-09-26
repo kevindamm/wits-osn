@@ -31,8 +31,10 @@ import (
 
 // Abstraction over the structural type of values in a table or group of tables.
 type Record interface {
-	SqlCreateAndInit() string
+	SqlCreate(string) string
+	SqlInit(string) string
 
+	IsValid() bool
 	ScanRecord(*sql.Row) error
 	RecordValues() ([]driver.Value, error)
 }
@@ -44,7 +46,25 @@ type Table[T Record] struct {
 	Primary string
 }
 
+type TableIndex[T Record, Index comparable] struct {
+	Table      *Table[T]
+	Column     string
+	ColumnZero Index
+}
+
+func (table Table[T]) CreateAndInit(db *sql.DB) {
+	log.Println("creating table '" + table.Name + "'")
+	must_execsql(db, table.Zero.SqlCreate(table.Name))
+
+	initsql := table.Zero.SqlInit(table.Name)
+	if initsql != "" {
+		log.Println("populating table '" + table.Name + "'")
+		must_execsql(db, initsql)
+	}
+}
+
 // Only needs to be called once at database setup.  Also closes the database.
+// Will LOG(FATAL) an error if creation or initialization fail, with SQL error.
 func CreateTablesAndClose(db_path string) error {
 	witsdb, err := open_database(db_path)
 	if err != nil {
@@ -52,10 +72,7 @@ func CreateTablesAndClose(db_path string) error {
 	}
 	defer witsdb.Close()
 
-	err = execsql(witsdb.sqldb, witsdb.status.Zero.SqlCreateAndInit())
-	if err != nil {
-		return err
-	}
+	witsdb.status.CreateAndInit(witsdb.sqldb)
 
 	for _, schema := range [][]string{
 		// base enums
@@ -80,6 +97,10 @@ func CreateTablesAndClose(db_path string) error {
 	return nil
 }
 
+// Execute the SQL statement on the provided database.
+//
+// Prefer the public methods of the WitsDB interface, this is intentionally
+// reserved for one-off statements where the result-set isn't important.
 func execsql(db *sql.DB, sql string) error {
 	stmt, err := db.Prepare(sql)
 	if err != nil {
@@ -87,4 +108,23 @@ func execsql(db *sql.DB, sql string) error {
 	}
 	_, err = stmt.Exec()
 	return err
+}
+
+// Convenience check-fail for errors encountered during database setup.
+// Fails loudly so that awareness of likely schema corruption is foremost.
+// Reserved for package-internal because it should only be used during setup.
+func must_execsql(db *sql.DB, sql string) {
+	stmt, err := db.Prepare(sql)
+	if err != nil {
+		log.Println("error preparing SQL")
+		log.Println(sql)
+		log.Fatal(err)
+	}
+
+	_, err = stmt.Exec()
+	if err != nil {
+		log.Println("error executing SQL")
+		log.Println(sql)
+		log.Fatal(err)
+	}
 }

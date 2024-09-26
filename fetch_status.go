@@ -39,7 +39,7 @@ const (
 	STATUS_INDEXED
 	STATUS_INVALID
 	STATUS_LEGACY
-	StatusRange
+	FetchStatusRange
 )
 
 func (status FetchStatus) IsValid() bool {

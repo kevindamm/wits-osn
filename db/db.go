@@ -61,6 +61,7 @@ func OpenOsnDB(filepath string) OsnDB {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	if err = osndb.PrepareQueries(); err != nil {
 		log.Fatal(err)
 	}
@@ -82,6 +83,10 @@ func open_database(filepath string) (*osndb, error) {
 
 	osndb := new(osndb)
 	osndb.sqldb = db
+
+	// We can initialize the table mappings without preparing queries.
+	osndb.status = MakeEnumTable("fetch_status", osn.FetchStatusRange)
+
 	return osndb, nil
 }
 
@@ -171,7 +176,13 @@ func (osndb *osndb) PrepareQueries() error {
 type osndb struct {
 	sqldb *sql.DB
 
-	status Table[FetchStatusRecord]
+	// read-only tables
+	status EnumTable[osn.FetchStatus]
+	//leagues Table[Leagues]
+	//races   Table[Races]
+	//maps    Table[LegacyMaps]
+
+	// writable tables
 
 	cachedMaps    map[int8]osn.Map
 	cachedPlayers map[int64]osn.Player

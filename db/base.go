@@ -22,15 +22,6 @@
 
 package db
 
-import (
-	"database/sql"
-	"database/sql/driver"
-	"fmt"
-	"strings"
-
-	osn "github.com/kevindamm/wits-osn"
-)
-
 // Contains schema definitions for tables which need to be defined in the DB but
 // are not ever queried directly.  Typically these are enumerations which define
 // the allowed values.
@@ -46,37 +37,6 @@ var RacesSchema = []string{
 		(2, "Adorables"),  
 		(3, "Scallywags"),
 		(4, "Veggienauts");`,
-}
-
-type FetchStatusRecord osn.FetchStatus
-
-// Enumerative relation for the different steps of the fetcher/crawler.
-func (FetchStatusRecord) SqlCreateAndInit() string {
-	values := make([]string, 0)
-	for i := range osn.StatusRange {
-		status := osn.FetchStatus(i)
-		values = append(values, fmt.Sprintf("(%d, %s)", status, status))
-	}
-	populate_values := fmt.Sprintf("INSERT INTO fetch_status VALUES %s;",
-		strings.Join(values, ", "))
-
-	return `CREATE TABLE "fetch_status" (
-    "id"    INTEGER PRIMARY KEY,
-    "name"  VARCHAR(9) NOT NULL
-  ) WITHOUT ROWID;
-	
-	` + populate_values
-}
-
-// The receiver of this method is intentionally
-func (record FetchStatusRecord) ScanRecord(row *sql.Row) error {
-	return row.Scan(record)
-}
-
-func (record FetchStatusRecord) RecordValues() ([]driver.Value, error) {
-	return []driver.Value{
-		int(record), osn.FetchStatus(record).String(),
-	}, nil
 }
 
 // Enumerative relation for the different ranked leagues.
