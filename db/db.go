@@ -171,6 +171,8 @@ func (osndb *osndb) PrepareQueries() error {
 type osndb struct {
 	sqldb *sql.DB
 
+	status Table[FetchStatusRecord]
+
 	cachedMaps    map[int8]osn.Map
 	cachedPlayers map[int64]osn.Player
 

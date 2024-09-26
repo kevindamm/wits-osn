@@ -24,41 +24,54 @@ package db
 
 import (
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"log"
 )
 
-type Table[T Resource] struct {
-	Name string
-	Type T
-}
-
-func Columns() []string {
-
-	return []string{"rowid", ""}
-}
-
-// Abstraction over one or more tables, representing an atomic structural type.
-//
-// Some are defined in `base.go` (Maps, Leagues, Races, etc.) while others are
-// defined in the files associated with their type (Player, Match, Replay...).
-type Resource interface {
-	Name() string
-	CreateAndInitSql(db *sql.DB) error
-	SqlGet(db *sql.DB, id int64) error
+// Abstraction over the structural type of values in a table or group of tables.
+type Record interface {
+	SqlCreateAndInit() string
 
 	ScanRecord(*sql.Row) error
-	Columns() []string
-	//Values() []sql.ColumnType
-	//Subset([]string) []sql.ColumnType
+	RecordValues() ([]driver.Value, error)
 }
 
-func ExecBatch(db *osndb, schemata ...[]string) error {
-	for _, schema := range schemata {
+// Abstraction over one or more tables, represents an atomic structural type.
+type Table[T Record] struct {
+	Zero    T
+	Name    string
+	Primary string
+}
+
+// Only needs to be called once at database setup.  Also closes the database.
+func CreateTablesAndClose(db_path string) error {
+	witsdb, err := open_database(db_path)
+	if err != nil {
+		return errors.New("could not open WitsDB database")
+	}
+	defer witsdb.Close()
+
+	err = execsql(witsdb.sqldb, witsdb.status.Zero.SqlCreateAndInit())
+	if err != nil {
+		return err
+	}
+
+	for _, schema := range [][]string{
+		// base enums
+		LeaguesSchema, RacesSchema,
+		// map metadata, map data contained in JSON files
+		LegacyMapSchema,
+		PlayerSchema,
+		// matches must be defined before roles and standings
+		MatchesSchema,
+		PlayerRoleSchema,
+		PlayerStandingsSchema,
+	} {
 		for _, sql := range schema {
-			err := execsql(db.sqldb, sql)
+			err := execsql(witsdb.sqldb, sql)
 			if err != nil {
-				log.Println("error when executing SQL statement:")
+				log.Println("when creating and initializing tables, SQL:")
 				log.Println(sql)
 				return err
 			}
@@ -67,35 +80,11 @@ func ExecBatch(db *osndb, schemata ...[]string) error {
 	return nil
 }
 
-// Only needs to be called once at table setup.  Also closes the database.
-func CreateTablesAndClose(db_path string) error {
-	witsdb, err := open_database(db_path)
-	if err != nil {
-		return errors.New("could not open WitsDB database")
-	}
-	defer witsdb.Close()
-
-	err = ExecBatch(witsdb, [][]string{
-		FetchStatusSchema, LeaguesSchema, RacesSchema,
-		LegacyMapSchema,
-		PlayerSchema,
-		MatchesSchema,
-		PlayerRoleSchema,
-		PlayerStandingsSchema,
-	}...)
-	return err
-}
-
-// Convenience function for ad-hoc query execution.
-func execsql(db *sql.DB, query string) error {
-	stmt, err := db.Prepare(query)
+func execsql(db *sql.DB, sql string) error {
+	stmt, err := db.Prepare(sql)
 	if err != nil {
 		return err
 	}
 	_, err = stmt.Exec()
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }

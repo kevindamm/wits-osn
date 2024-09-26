@@ -99,9 +99,6 @@ func (db *osndb) AllMaps() ([]osn.Map, error) {
 	if err != nil {
 		return maps, err
 	}
-	if err != nil {
-		return maps, err
-	}
 	rows, err := stmt.Query()
 	if err != nil {
 		return maps, err

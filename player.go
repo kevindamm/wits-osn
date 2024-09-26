@@ -69,7 +69,7 @@ type PlayerStanding interface {
 }
 
 func NewStanding(league LeagueEnum, rank LeagueRank, points uint16, delta int8) (PlayerStanding, error) {
-	if !league.Valid() {
+	if !league.IsValid() {
 		return nil, fmt.Errorf("invalid league value %d", rank)
 	}
 	if rank < 0 || rank >= 128 {
@@ -107,7 +107,7 @@ const (
 	LEAGUE_SUPERTITAN
 )
 
-func (league LeagueEnum) Valid() bool {
+func (league LeagueEnum) IsValid() bool {
 	return uint8(league) > 0 && uint8(league) <= uint8(LEAGUE_SUPERTITAN)
 }
 
@@ -115,7 +115,7 @@ func (league LeagueEnum) Valid() bool {
 // LEAGUE_UNKNOWN if there was an error or no league with that number.
 func ParseLeague(str_uint string) LeagueEnum {
 	value, err := strconv.Atoi(str_uint)
-	if err != nil || !LeagueEnum(value).Valid() {
+	if err != nil || !LeagueEnum(value).IsValid() {
 		log.Printf("unrecognized league %s\n%s", str_uint, err)
 		return LEAGUE_UNKNOWN
 	}

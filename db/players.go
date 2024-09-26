@@ -22,6 +22,17 @@
 
 package db
 
+import (
+	"database/sql"
+	"database/sql/driver"
+
+	osn "github.com/kevindamm/wits-osn"
+)
+
+// This satisfies the Record interface for use as Table[T]
+// while being only a thin wrapper around the Player struct.
+type PlayerRecord osn.Player
+
 var PlayerSchema = []string{
 	// The player identifier and in-game display name,
 	// used for foreign key relations in replay-related tables.
@@ -36,6 +47,16 @@ var PlayerSchema = []string{
 	// An index is created to assist lookup of players by name.
 	`CREATE UNIQUE INDEX player_names
       ON players (name);`,
+}
+
+func (player PlayerRecord) ScanRecord(row *sql.Row) error {
+
+	return nil
+}
+
+func (player *PlayerRecord) RecordValues() ([]driver.Value, error) {
+
+	return []driver.Value{}, nil
 }
 
 var PlayerRoleSchema = []string{
