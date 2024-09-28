@@ -33,29 +33,33 @@ import (
 // and here we make the simplifying assumption that any enumerated type can fit
 // inside a single byte.  If the domain is larger than 255 items, express that
 // relation as a [Table[T Record]], named by a [TableIndex[Record, comparable]].
-type EnumTable[EnumType ~uint8] struct {
-	*Table[EnumRecord[EnumType]]
-	TableIndex[EnumRecord[EnumType], string]
-	Zero EnumRecord[EnumType]
+type EnumTable[T EnumType] struct {
+	*Table[EnumRecord[T]]
+	TableIndex[EnumRecord[T], string]
+	Zero EnumRecord[T]
+}
+
+type EnumType interface {
+	~uint8
+	String() string
 }
 
 // EnumTable is a common pattern of (id, name) pairwise relations.
 // The `id` is its enumeration and the `name` is persisted in the DB for
 // documentation.  The list of pairs is provided by a Functor: int -> string.
-func MakeEnumTable[EnumType ~uint8](tablename string, enumrange EnumType) EnumTable[EnumType] {
-	enumtable := Table[EnumRecord[EnumType]]{
-		Zero:    *new(EnumRecord[EnumType]),
+func MakeEnumTable[T EnumType](tablename string, enumrange T) EnumTable[T] {
+	enumtable := Table[EnumRecord[T]]{
 		Name:    tablename,
 		Primary: "id",
 	}
-	enumindex := TableIndex[EnumRecord[EnumType], string]{
+	enumindex := TableIndex[EnumRecord[T], string]{
 		Table:  &enumtable,
 		Column: "name",
 	}
-	return EnumTable[EnumType]{
+	return EnumTable[T]{
 		&enumtable,
 		enumindex,
-		EnumRecord[EnumType]{EnumType(0), enumrange},
+		EnumRecord[T]{enumtable.Zero.Value, enumrange},
 	}
 }
 

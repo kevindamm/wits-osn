@@ -89,23 +89,6 @@ func TestDBEnumTable(t *testing.T) {
 	}
 }
 
-func TestEnumTable(t *testing.T) {
-	tablename := "myenum"
-	enumtable := MakeEnumTable(tablename, EnumRange)
-	//expected := fmt.Sprintf("INSERT INTO %s VALUES (0, %s), (1, %s), (2, %s), (3, %s);",
-	//	tablename, enum_names[0], enum_names[1], enum_names[2], enum_names[3]) //, enum_names[4])
-	expected := `columns []string
-	UNKNOWN to Sí?
-`
-
-	if enumtable.Zero.Columns(tablename) != expected {
-		// BUG unexpected result: enumrange value is dropped,
-		// we get "UNKNOWN to UNKNOWN"
-		t.Errorf("init SQL doesn't match expectation\n%s\n%s",
-			enumtable.Zero.Columns(tablename), expected)
-	}
-}
-
 type GenericEnum interface {
 	~uint8
 	String() string
@@ -122,7 +105,7 @@ type EnumRecord[EnumType GenericEnum] struct {
 
 func (enum EnumRecord[T]) Columns(string) string {
 	return fmt.Sprintf("columns []string\n  %s to %s\n",
-		enum.Value.String(), enum.Range.String())
+		enum.Value.String(), T(enum.Range-1))
 }
 
 type EnumTable[EnumType GenericEnum] struct {
@@ -134,5 +117,20 @@ func MakeEnumTable[EnumType GenericEnum](tablename string, enumrange EnumType) E
 	return EnumTable[EnumType]{
 		Name: tablename,
 		Zero: EnumRecord[EnumType]{Range: enumrange},
+	}
+}
+
+func TestEnumTable(t *testing.T) {
+	tablename := "myenum"
+	enumtable := MakeEnumTable(tablename, EnumRange)
+	//expected := fmt.Sprintf("INSERT INTO %s VALUES (0, %s), (1, %s), (2, %s), (3, %s);",
+	//	tablename, enum_names[0], enum_names[1], enum_names[2], enum_names[3]) //, enum_names[4])
+	expected := `columns []string
+  UNKNOWN to Sí?
+`
+
+	if enumtable.Zero.Columns(tablename) != expected {
+		t.Errorf("init SQL doesn't match expectation\n%s\n%s",
+			enumtable.Zero.Columns(tablename), expected)
 	}
 }

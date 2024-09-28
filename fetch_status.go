@@ -43,7 +43,7 @@ const (
 )
 
 func (status FetchStatus) IsValid() bool {
-	return uint8(status) <= uint8(STATUS_LEGACY)
+	return uint8(status) < uint8(FetchStatusRange)
 }
 
 var status_names = []string{
