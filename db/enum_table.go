@@ -27,14 +27,12 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"strings"
-
-	osn "github.com/kevindamm/wits-osn"
 )
 
 // Serialized enum types are a recurring pattern in fully defined relational DBs
 // and here we make the simplifying assumption that any enumerated type can fit
 // inside a single byte.  If the domain is larger than 255 items, express that
-// relation as a Table[T] and TableIndex[T, comparable] where T is a [Record].
+// relation as a [Table[T Record]], named by a [TableIndex[Record, comparable]].
 type EnumTable[EnumType ~uint8] struct {
 	*Table[EnumRecord[EnumType]]
 	TableIndex[EnumRecord[EnumType], string]
@@ -46,6 +44,7 @@ type EnumTable[EnumType ~uint8] struct {
 // documentation.  The list of pairs is provided by a Functor: int -> string.
 func MakeEnumTable[EnumType ~uint8](tablename string, enumrange EnumType) EnumTable[EnumType] {
 	enumtable := Table[EnumRecord[EnumType]]{
+		Zero:    *new(EnumRecord[EnumType]),
 		Name:    tablename,
 		Primary: "id",
 	}
@@ -75,11 +74,11 @@ func (EnumRecord[T]) SqlCreate(tablename string) string {
   ) WITHOUT ROWID;`, tablename)
 }
 
-func (record EnumRecord[T]) SqlInit(tablename string) string {
-	values := make([]string, osn.FetchStatusRange)
+func (record EnumRecord[EnumType]) SqlInit(tablename string) string {
+	values := make([]string, record.Range)
 	for i := range record.Range {
-		status := T(i)
-		values[i] = fmt.Sprintf(`(%d, "%s")`, status, status)
+		status := EnumType(i)
+		values[i] = fmt.Sprintf(`(%d, "%s")`, status, string(status))
 	}
 	return fmt.Sprintf(`INSERT INTO %s VALUES %s;`,
 		tablename, strings.Join(values, ", "))
@@ -94,6 +93,7 @@ func (record EnumRecord[T]) ScanRecord(row *sql.Row) error {
 	return row.Scan(record)
 }
 
-func (record EnumRecord[T]) RecordValues() ([]driver.Value, error) {
-	return []driver.Value{record.Value, fmt.Sprintf("%s", record.Value)}, nil
+func (record EnumRecord[EnumType]) RecordValues() ([]driver.Value, error) {
+	value := EnumType(record.Value)
+	return []driver.Value{record.Value, string(value)}, nil
 }
