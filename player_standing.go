@@ -18,23 +18,43 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-// github:kevindamm/wits-osn/player.go
+// github:kevindamm/wits-osn/player_standing.go
 
 package osn
 
-type Player struct {
-	RowID int64  `json:"-" orm:"rowid,pk"`
-	GCID  string `json:"gcid,omitempty" orm:"gcid?,unique"`
-	Name  string `json:"name" orm:"name!Unknown,unique"`
+import "fmt"
+
+// An ELO-like measurement and a current league + standings.
+type PlayerStanding interface {
+	League() LeagueEnum
+	Rank() LeagueRank
+
+	PointsBefore() uint16
+	PointsAfter() uint16
+	Delta() int8
 }
 
-// Simple (no GCID) constructor for a Player instance.
-func NewPlayer(id int64, name string) Player {
-	return Player{RowID: id, GCID: "", Name: name}
+func NewStanding(league LeagueEnum, rank LeagueRank, points uint16, delta int8) (PlayerStanding, error) {
+	if !league.IsValid() {
+		return nil, fmt.Errorf("invalid league value %d", rank)
+	}
+	if rank < 0 || rank >= 128 {
+		return nil, fmt.Errorf("invalid standings rank value %d", rank)
+	}
+	return standing{league, rank, points, delta}, nil
 }
 
-var UNKNOWN_PLAYER Player = Player{
-	RowID: 0,
-	GCID:  "",
-	Name:  "",
+type standing struct {
+	league LeagueEnum
+	rank   LeagueRank
+	points uint16
+	delta  int8
+}
+
+func (ranked standing) League() LeagueEnum  { return ranked.league }
+func (ranked standing) Rank() LeagueRank    { return ranked.rank }
+func (ranked standing) PointsAfter() uint16 { return ranked.points }
+func (ranked standing) Delta() int8         { return ranked.delta }
+func (ranked standing) PointsBefore() uint16 {
+	return uint16(int(ranked.points) - int(ranked.delta))
 }

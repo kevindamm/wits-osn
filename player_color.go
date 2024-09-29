@@ -18,23 +18,24 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-// github:kevindamm/wits-osn/player.go
+// github:kevindamm/wits-osn/player_color.go
 
 package osn
 
-type Player struct {
-	RowID int64  `json:"-" orm:"rowid,pk"`
-	GCID  string `json:"gcid,omitempty" orm:"gcid?,unique"`
-	Name  string `json:"name" orm:"name!Unknown,unique"`
-}
+// This is actually arbitrary but provided for internal consistency.
+type PlayerColorEnum uint8
 
-// Simple (no GCID) constructor for a Player instance.
-func NewPlayer(id int64, name string) Player {
-	return Player{RowID: id, GCID: "", Name: name}
-}
+const (
+	PLAYERCOLOR_UNKNOWN PlayerColorEnum = iota
+	PLAYERCOLOR_BLUE
+	PLAYERCOLOR_RED
+	PLAYERCOLOR_GREEN
+	PLAYERCOLOR_GOLD
+	PlayerColorRange
+)
 
-var UNKNOWN_PLAYER Player = Player{
-	RowID: 0,
-	GCID:  "",
-	Name:  "",
+func (color PlayerColorEnum) String() string {
+	return []string{
+		"UNKNOWN", "BLUE", "RED", "GREEN", "GOLD",
+	}[int(color)]
 }

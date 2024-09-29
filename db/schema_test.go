@@ -33,19 +33,17 @@ type MyEnumType uint8
 
 const (
 	ENUM_UNKNOWN MyEnumType = iota
-	ENUM_AAA
+	ENUM_AYY
 	ENUM_BEE
 	ENUM_SEE
 	EnumRange
-	ENUM_KAY = uint8('K') // TODO test noncontiguous range
 )
 
 var enum_names = []string{
 	"UNKNOWN",
-	/* AAA */ "Hey!",
-	/* BEE */ "Are, 'e a tee ache eee",
+	/* AYY */ "Hey!",
+	/* BEE */ "Be, not to not be.",
 	/* SEE */ "Sí?",
-	// /* KAY */ "ok",
 }
 
 func (enum MyEnumType) IsValid() bool {
@@ -61,76 +59,32 @@ func (enum MyEnumType) String() string {
 
 // String conversion uses the enum's type (MyEnumType) not the underlying uint8.
 func TestEnum(t *testing.T) {
-	yay := ENUM_AAA
+	yay := ENUM_AYY
 
 	// The same value can be interpreted as a number or via String()-ification.
 	formatted := fmt.Sprintf("%d: %s", yay, yay)
 
 	if formatted != "1: Hey!" {
-		t.Errorf("improper casting, formatted = '%s'", formatted)
+		t.Errorf("improper casting, %d formatted = '%s'",
+			yay, formatted)
 	}
 }
 
 func TestDBEnumTable(t *testing.T) {
 	tablename := "myenum"
 	enumtable := db.MakeEnumTable(tablename, EnumRange)
-	create := enumtable.Zero.SqlCreate(tablename)
-	if create != fmt.Sprintf(`CREATE TABLE "%s" (
+	create := enumtable.SqlCreate()
+	if create != `CREATE TABLE "myenum" (
     "id"    INTEGER PRIMARY KEY,
-    "name"  VARCHAR(9) NOT NULL
-  ) WITHOUT ROWID;`, tablename) {
+    "name"  TEXT NOT NULL
+  ) WITHOUT ROWID;` {
 		t.Errorf("SQL CREATE TABLE malformed; got\n%s", create)
 	}
 
-	init := enumtable.Zero.SqlInit(tablename)
-	if create != fmt.Sprintf(`INSERT INTO %s VALUES (0, "%s"), (1, "%s"), (2, "%s"), (3, "%s");`,
-		tablename, enum_names[0], enum_names[1], enum_names[2], enum_names[3]) {
-		t.Errorf("SQL INSERT VALUES malformed; got\n%s", init)
-	}
-}
-
-type GenericEnum interface {
-	~uint8
-	String() string
-}
-
-type Record interface {
-	Columns(string) string
-}
-
-type EnumRecord[EnumType GenericEnum] struct {
-	Value EnumType
-	Range EnumType
-}
-
-func (enum EnumRecord[T]) Columns(string) string {
-	return fmt.Sprintf("columns []string\n  %s to %s\n",
-		enum.Value.String(), T(enum.Range-1))
-}
-
-type EnumTable[EnumType GenericEnum] struct {
-	Name string
-	Zero EnumRecord[EnumType]
-}
-
-func MakeEnumTable[EnumType GenericEnum](tablename string, enumrange EnumType) EnumTable[EnumType] {
-	return EnumTable[EnumType]{
-		Name: tablename,
-		Zero: EnumRecord[EnumType]{Range: enumrange},
-	}
-}
-
-func TestEnumTable(t *testing.T) {
-	tablename := "myenum"
-	enumtable := MakeEnumTable(tablename, EnumRange)
-	//expected := fmt.Sprintf("INSERT INTO %s VALUES (0, %s), (1, %s), (2, %s), (3, %s);",
-	//	tablename, enum_names[0], enum_names[1], enum_names[2], enum_names[3]) //, enum_names[4])
-	expected := `columns []string
-  UNKNOWN to Sí?
-`
-
-	if enumtable.Zero.Columns(tablename) != expected {
-		t.Errorf("init SQL doesn't match expectation\n%s\n%s",
-			enumtable.Zero.Columns(tablename), expected)
+	init := enumtable.SqlInit()
+	expected := fmt.Sprintf(`INSERT INTO myenum VALUES (0, "%s"), (1, "%s"), (2, "%s"), (3, "%s");`,
+		enum_names[0], enum_names[1], enum_names[2], enum_names[3])
+	if init != expected {
+		t.Errorf("SQL INSERT VALUES malformed; got\n%s\nwant\n%s", init, expected)
 	}
 }

@@ -18,23 +18,25 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-// github:kevindamm/wits-osn/player.go
+// github:kevindamm/wits-osn/enum_type.go
 
 package osn
 
-type Player struct {
-	RowID int64  `json:"-" orm:"rowid,pk"`
-	GCID  string `json:"gcid,omitempty" orm:"gcid?,unique"`
-	Name  string `json:"name" orm:"name!Unknown,unique"`
-}
+import "fmt"
 
-// Simple (no GCID) constructor for a Player instance.
-func NewPlayer(id int64, name string) Player {
-	return Player{RowID: id, GCID: "", Name: name}
-}
+// Dependent type for EnumTable, the shape that all enums are assumed to have.
+//
+// Within this project, all enum-compatible values must satisfy this interface.
+// An underlying type of uint8 (anything larger should be promoted to a Table)
+// and an ability to be converted into a string.  The string equivalent will be
+// used as the human-readable format, while elsewhere the integer value is used.
+//
+// It is assumed that the zero value for enums has UNKNOWN-equivalent semantics.
+type EnumType interface {
+	~uint8
+	fmt.Stringer
 
-var UNKNOWN_PLAYER Player = Player{
-	RowID: 0,
-	GCID:  "",
-	Name:  "",
+	// Returns true if the represented value is valid;
+	// the uint8(0) value ("UNKNOWN") should also be considered valid.
+	IsValid() bool
 }

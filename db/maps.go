@@ -22,11 +22,19 @@
 
 package db
 
-import osn "github.com/kevindamm/wits-osn"
+import (
+	"database/sql"
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
+	"log"
+
+	osn "github.com/kevindamm/wits-osn"
+)
 
 // OSN map representation, identifies the layout and placement of initial play.
 type LegacyMap struct {
-	MapID int8   `json:"map_id"`
+	MapID uint8  `json:"map_id"`
 	Name  string `json:"name"`
 
 	// uses a player count of 0 for a deprecated map
@@ -35,18 +43,8 @@ type LegacyMap struct {
 	MapDetails
 }
 
-type MapDetails struct {
-	Filename string       `json:"-"`
-	Theme    osn.RaceEnum `json:"map_theme"`
-	Terrain  []byte       `json:"terrain,omitempty"`
-	Units    []byte       `json:"units,omitempty"`
-	Width    int          `json:"columns"`
-	Height   int          `json:"rows"`
-}
-
-var LegacyMapSchema = []string{
-	// Enumerative relation for maps, including some additional properties.
-	`CREATE TABLE "maps" (
+func (LegacyMap) SqlCreate(tablename string) string {
+	return fmt.Sprintf(`CREATE TABLE "%s" (
       "map_id"        INTEGER PRIMARY KEY,
       "map_name"      VARCHAR(127) NOT NULL,
       "player_count"  INTEGER CHECK(player_count == 2 OR player_count == 4),
@@ -62,10 +60,15 @@ var LegacyMapSchema = []string{
 
       FOREIGN KEY (map_theme) REFERENCES races (race_id)
         ON DELETE CASCADE ON UPDATE NO ACTION
-    ) WITHOUT ROWID;`,
+    ) WITHOUT ROWID;`, tablename)
+}
 
-	`INSERT INTO maps VALUES (0, "MAP_UNKNOWN", NULL, "", 0, NULL, 0, 0, true);`,
-	`INSERT INTO maps
+func (LegacyMap) SqlInit(tablename string) []string {
+	return []string{
+		fmt.Sprintf(`INSERT INTO %s VALUES
+	    (0, "MAP_UNKNOWN", NULL, "", 0, NULL, 0, 0, true);`, tablename),
+
+		fmt.Sprintf(`INSERT INTO %s
       (map_id, map_name, player_count, map_filename, map_theme, width, height)
     VALUES
       (1,      "Machination",       4, "machination",        1,    13,    13),
@@ -86,7 +89,41 @@ var LegacyMapSchema = []string{
       (16,     "Sweet Tooth",       2, "sweet-tooth",        2,    13,    10),
       (17,     "Sugar Rock",        4, "sugar-rock",         2,    13,    13),
       (18,     "Mechanism",         4, "mechanism",          1,    13,    13);`,
-	`UPDATE maps set deprecated = true WHERE map_id = 2;`,
+			tablename),
+
+		fmt.Sprintf(`UPDATE %s set deprecated = true WHERE map_id = 2;`,
+			tablename),
+	}
+}
+
+func (gamemap LegacyMap) Details() []byte {
+	bytes, err := json.Marshal(gamemap.MapDetails)
+	if err != nil {
+		log.Fatalf("error marshaling legacy map details\n%s", err)
+	}
+	return bytes
+}
+
+// TODO
+func (LegacyMap) IsValid() bool { return true }
+
+func (gamemap LegacyMap) ScanRecord(*sql.Row) error {
+	return nil
+}
+
+func (gamemap LegacyMap) RecordValues() ([]driver.Value, error) {
+	return []driver.Value{
+		gamemap.MapID, gamemap.Name, gamemap.PlayerCount, gamemap.Details(),
+	}, nil
+}
+
+type MapDetails struct {
+	Filename string           `json:"-"`
+	Theme    osn.UnitRaceEnum `json:"map_theme"`
+	Terrain  []byte           `json:"terrain,omitempty"`
+	Units    []byte           `json:"units,omitempty"`
+	Width    int              `json:"columns"`
+	Height   int              `json:"rows"`
 }
 
 func (db *osndb) AllMaps() ([]osn.Map, error) {

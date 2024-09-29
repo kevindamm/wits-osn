@@ -18,42 +18,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-// github:kevindamm/wits-osn/db/base.go
+// github:kevindamm/wits-osn/player_standing.go
 
-package db
+package osn
 
-// Contains schema definitions for tables which need to be defined in the DB but
-// are not ever queried directly.  Typically these are enumerations which define
-// the allowed values.
+// Represents an assignment of a Player (identifier) with match participation.
+type PlayerRole struct {
+	Player    `json:"player" orm:"fk(players)"`
+	UnitRace  UnitRaceEnum    `orm:"fk(races)"`
+	BaseTheme int             `json:"theme"`
+	TurnOrder PlayerColorEnum `orm:"turn_order"`
 
-var RacesSchema = []string{
-	`create TABLE "races" (
-		"race_id"    INTEGER PRIMARY KEY,
-		"race_name"  VARCHAR(12) UNIQUE NOT NULL
-	) WITHOUT ROWID;`,
+	AP int `json:"wits"`
 
-	`INSERT INTO races VALUES
-		(1, "Feedback"),
-		(2, "Adorables"),  
-		(3, "Scallywags"),
-		(4, "Veggienauts");`,
-}
-
-// Enumerative relation for the different ranked leagues.
-// Players may be promoted or demoted based on win/loss records.
-var LeaguesSchema = []string{
-	`CREATE TABLE "leagues" (
-     "league_id"    INTEGER PRIMARY KEY,
-     "league_name"  TEXT NOT NULL,
-
-     UNIQUE (league_name) ON CONFLICT IGNORE
-   ) WITHOUT ROWID;`,
-
-	`INSERT INTO leagues VALUES
-     (0, "UNKNOWN"),
-     (1, "Fluffy"),
-     (2, "Clever"),
-     (3, "Gifted"),
-     (4, "Master"),
-     (5, "SuperTitan");`,
+	RankBefore PlayerStanding `json:"rank_prev" orm:"rank_until=fk(standings)"`
+	RankAfter  PlayerStanding `json:"rank_next,omitempty" orm:"rank_after=fk(standings)"`
 }

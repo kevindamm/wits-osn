@@ -220,37 +220,3 @@ func assert_int64(image string) int64 {
 	}
 	return value
 }
-
-// Enumeration of race; determines special unit and affects visual appearance.
-// Satisfies Resource[RaceEnum] for inclusion in database tables.
-type RaceEnum uint8
-
-const (
-	RACE_UNKNOWN RaceEnum = iota
-	RACE_FEEDBACK
-	RACE_ADORABLES
-	RACE_SCALLYWAGS
-	RACE_VEGGIENAUTS
-)
-
-type Race struct {
-	RaceEnum `orm:"rowid"`
-	Name     string `orm:"name!Unknown,unique"`
-	Special  string `orm:"special!"`
-}
-
-func (race Race) String() string {
-	return race.Name
-}
-
-func (race Race) MarshalJSON() ([]byte, error) {
-	return json.Marshal(int(race.RaceEnum))
-}
-
-var Races [5]Race = [5]Race{
-	{RACE_UNKNOWN, "Unknown", "Unknown"},
-	{RACE_FEEDBACK, "Feedback", "Scrambler"},
-	{RACE_ADORABLES, "Adorables", "Mobi"},
-	{RACE_SCALLYWAGS, "Scallywags", "Bombshell"},
-	{RACE_VEGGIENAUTS, "Veggienauts", "Bramble"},
-}

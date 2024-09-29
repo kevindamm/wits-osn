@@ -26,13 +26,17 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"log"
+	"strings"
+
+	osn "github.com/kevindamm/wits-osn"
 )
 
 // Abstraction over the structural type of values in a table or group of tables.
 type Record interface {
 	SqlCreate(string) string
-	SqlInit(string) string
+	SqlInit(string) []string
 
 	IsValid() bool
 	ScanRecord(*sql.Row) error
@@ -46,17 +50,65 @@ type Table[T Record] struct {
 	Primary string
 }
 
+// Serialized enum types are a recurring pattern in fully defined relational DBs
+// and here we make the simplifying assumption that any enumerated type can fit
+// inside a single byte.  If the domain is larger than 255 items, express that
+// relation as a [Table[T Record]], named by a [TableIndex[Record, comparable]].
+type EnumTable[T osn.EnumType] struct {
+	Name string
+
+	// Represents the limit value (excl.) for the valid enumeration range.
+	// Enum definitions should use const, iota and a trailing enum value to
+	// derive this value from the last valid enumeration.
+	limit T
+}
+
+// Constructor for EnumTable[T] that can be called from other modules.
+// However, it is only ever called from the database initialization or tests.
+//
+// EnumTable is a common pattern of (id, name) pairwise relations.
+// The `id` is its enumeration and the `name` is persisted in the DB for
+// documentation.  The list of pairs is provided by a Functor: int -> string.
+func MakeEnumTable[T osn.EnumType](tablename string, enumrange T) EnumTable[T] {
+	return EnumTable[T]{tablename, enumrange}
+}
+
+// Returns an array of each valid value of the composed enum type.
+func (table EnumTable[T]) Values() []T {
+	values := make([]T, table.limit)
+	for i := range table.limit {
+		values[i] = T(i)
+	}
+	return values
+}
+
+func (table EnumTable[T]) SqlCreate() string {
+	return fmt.Sprintf(`CREATE TABLE "%s" (
+    "id"    INTEGER PRIMARY KEY,
+    "name"  TEXT NOT NULL
+  ) WITHOUT ROWID;`, table.Name)
+}
+
+func (table EnumTable[T]) SqlInit() string {
+	rows := make([]string, table.limit)
+	for i, value := range table.Values() {
+		rows[i] = fmt.Sprintf(`(%d, "%s")`, value, value)
+	}
+	return fmt.Sprintf(`INSERT INTO %s VALUES %s;`,
+		table.Name, strings.Join(rows, ", "))
+}
+
 type TableIndex[T Record, Index comparable] struct {
 	Table      *Table[T]
 	Column     string
 	ColumnZero Index
 }
 
-func (table Table[T]) CreateAndInit(db *sql.DB) {
+func init_enum_table[T osn.EnumType](db *sql.DB, table EnumTable[T]) {
 	log.Println("creating table '" + table.Name + "'")
-	must_execsql(db, table.Zero.SqlCreate(table.Name))
+	must_execsql(db, table.SqlCreate())
 
-	initsql := table.Zero.SqlInit(table.Name)
+	initsql := table.SqlInit()
 	if initsql != "" {
 		log.Println("populating table '" + table.Name + "'")
 		must_execsql(db, initsql)
@@ -72,13 +124,21 @@ func CreateTablesAndClose(db_path string) error {
 	}
 	defer witsdb.Close()
 
-	witsdb.status.CreateAndInit(witsdb.sqldb)
+	init_enum_table(witsdb.sqldb, witsdb.status)
+	init_enum_table(witsdb.sqldb, witsdb.leagues)
+	init_enum_table(witsdb.sqldb, witsdb.races)
+
+	// This could be improved; the table name is included in table instantiation.
+	log.Print(witsdb.maps.Zero.SqlCreate("maps"))
+	must_execsql(witsdb.sqldb, witsdb.maps.Zero.SqlCreate("maps"))
+
+	for _, sql := range witsdb.maps.Zero.SqlInit("maps") {
+		log.Print(sql)
+		must_execsql(witsdb.sqldb, sql)
+	}
 
 	for _, schema := range [][]string{
-		// base enums
-		LeaguesSchema, RacesSchema,
 		// map metadata, map data contained in JSON files
-		LegacyMapSchema,
 		PlayerSchema,
 		// matches must be defined before roles and standings
 		MatchesSchema,

@@ -86,6 +86,10 @@ func open_database(filepath string) (*osndb, error) {
 
 	// We can initialize the table mappings without preparing queries.
 	osndb.status = MakeEnumTable("fetch_status", osn.FetchStatusRange)
+	osndb.leagues = MakeEnumTable("player_leagues", osn.LeagueRange)
+	osndb.races = MakeEnumTable("races", osn.UnitRaceRange)
+
+	osndb.maps = Table[LegacyMap]{Name: "maps", Primary: "map_id"}
 
 	return osndb, nil
 }
@@ -177,10 +181,12 @@ type osndb struct {
 	sqldb *sql.DB
 
 	// read-only tables
-	status EnumTable[osn.FetchStatus]
-	//leagues Table[Leagues]
-	//races   Table[Races]
-	//maps    Table[LegacyMaps]
+	status  EnumTable[osn.FetchStatus]
+	leagues EnumTable[osn.LeagueEnum]
+	races   EnumTable[osn.UnitRaceEnum]
+
+	maps Table[LegacyMap]
+	//map_names TableIndex[LegacyMap, string]
 
 	// writable tables
 
