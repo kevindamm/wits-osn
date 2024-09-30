@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"testing"
 
+	osn "github.com/kevindamm/wits-osn"
 	"github.com/kevindamm/wits-osn/db"
 )
 
@@ -72,7 +73,7 @@ func TestEnum(t *testing.T) {
 
 func TestDBEnumTable(t *testing.T) {
 	tablename := "myenum"
-	enumtable := db.MakeEnumTable(tablename, EnumRange)
+	enumtable := db.MakeEnumTable(tablename, osn.EnumValuesFor(EnumRange))
 	create := enumtable.SqlCreate()
 	if create != `CREATE TABLE "myenum" (
     "id"    INTEGER PRIMARY KEY,

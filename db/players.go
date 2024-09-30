@@ -33,30 +33,63 @@ import (
 // while being only a thin wrapper around the Player struct.
 type PlayerRecord osn.Player
 
-var PlayerSchema = []string{
-	// The player identifier and in-game display name,
-	// used for foreign key relations in replay-related tables.
-	`CREATE TABLE "players" (
-      "id"    INTEGER PRIMARY KEY,
-      "gcid"  TEXT UNIQUE,
-      "name"  TEXT NOT NULL
-    ) WITHOUT ROWID;`,
-
-	`INSERT INTO players (id, gcid, name) VALUES (0, NULL, "UNKNOWN");`,
-
-	// An index is created to assist lookup of players by name.
-	`CREATE UNIQUE INDEX player_names
-      ON players (name);`,
+func (player PlayerRecord) Columns() []string {
+	return []string{
+		"id",
+		"gcid",
+		"name",
+	}
 }
 
-func (player PlayerRecord) ScanRecord(row *sql.Row) error {
-
+func (player PlayerRecord) ScanRow(row *sql.Row) error {
+	// TODO
 	return nil
 }
 
-func (player *PlayerRecord) RecordValues() ([]driver.Value, error) {
-
+func (player *PlayerRecord) ToValues() ([]driver.Value, error) {
+	// TODO
 	return []driver.Value{}, nil
+}
+
+type players_table struct {
+	table[*PlayerRecord]
+}
+
+func (players_table) SqlCreate() string {
+	return `CREATE TABLE "players" (
+    "id"    INTEGER PRIMARY KEY,
+    "gcid"  TEXT UNIQUE,
+    "name"  TEXT NOT NULL
+  ) WITHOUT ROWID;`
+}
+
+func (players_table) SqlInit() string {
+	return `
+  INSERT INTO players (id, gcid, name) VALUES (0, NULL, "UNKNOWN");
+	
+  CREATE UNIQUE INDEX player_names ON players (name);`
+}
+
+type PlayerRoleRecord osn.PlayerRole
+
+func (PlayerRoleRecord) Columns() []string {
+	return []string{"match_id", "player_id", "turn_order"}
+}
+
+func (record PlayerRoleRecord) ScanRow(*sql.Row) error {
+
+	// TODO
+	return nil
+}
+
+func (record PlayerRoleRecord) ToValues() ([]driver.Value, error) {
+
+	// TODO
+	return []driver.Value{}, nil
+}
+
+type player_roles_table struct {
+	table[*PlayerRoleRecord]
 }
 
 var PlayerRoleSchema = []string{
@@ -105,3 +138,46 @@ var PlayerStandingsSchema = []string{
         ON DELETE CASCADE ON UPDATE NO ACTION
     );`,
 }
+
+//	osndb.insertPlayer, err = db.Prepare(`INSERT INTO
+//	  players (id, name)
+//		VALUES (?, ?)`)
+//	if err != nil {
+//		return err
+//	}
+//
+//	osndb.insertPlayerGCID, err = db.Prepare(`UPDATE players
+//		SET gcid = ?
+//		WHERE id = ?;`)
+//	if err != nil {
+//		return err
+//	}
+
+//	osndb.insertStanding, err = db.Prepare(`INSERT INTO
+//	  standings (after, player_league, player_rank, player_points, player_delta)
+//		VALUES (?, ?, ?, ?, ?)
+//	`)
+//	if err != nil {
+//		return err
+//	}
+
+//	osndb.updatePrevStanding, err = db.Prepare(`UPDATE standings
+//		SET until = ?
+//		WHERE after = ?;`)
+//	if err != nil {
+//		return err
+//	}
+
+//	osndb.selectPlayerByID, err = db.Prepare(`SELECT *
+//	  FROM players
+//	  WHERE id = ?;`)
+//	if err != nil {
+//		return err
+//	}
+//
+//	osndb.selectPlayerByName, err = db.Prepare(`SELECT *
+//	  FROM players
+//	  WHERE name = ?;`)
+//	if err != nil {
+//		return err
+//	}

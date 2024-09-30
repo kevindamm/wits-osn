@@ -114,11 +114,11 @@ func BackfillFromIndex(witsdb db.OsnDB, tsv_path string) error {
 
 		players := metadata.Players()
 		for _, player := range players {
-			witsdb.InsertPlayer(&player)
+			witsdb.Players().Insert(&player)
 		}
 
 		match := metadata.ToLegacyMatch()
-		witsdb.InsertMatch(&match)
+		witsdb.Matches().Insert(&match)
 
 		if true {
 			// TODO only processing one record until the schema transform is complete

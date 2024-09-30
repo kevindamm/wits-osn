@@ -82,5 +82,5 @@ type LeagueRank uint8
 
 func (rank LeagueRank) IsValid() bool { return true }
 func (rank LeagueRank) String() string {
-	return fmt.Sprintf("%3d", rank)
+	return fmt.Sprintf("%d", rank)
 }

@@ -22,19 +22,17 @@
 
 package osn
 
-// DEPRECATED wip migrating to db/maps.go
-
-type Map struct {
+type LegacyMap struct {
 	MapID int8   `json:"map_id"`
 	Name  string `json:"name"`
 
 	// uses a player count of 0 for a deprecated map
 	PlayerCount int
 
-	MapDetails
+	LegacyMapDetails
 }
 
-type MapDetails struct {
+type LegacyMapDetails struct {
 	Filename string `json:"-"`
 	Theme    int    `json:"map_theme"`
 	Terrain  []byte `json:"terrain,omitempty"`
@@ -43,6 +41,7 @@ type MapDetails struct {
 	Height   int    `json:"rows"`
 }
 
-func UnknownMap() Map {
-	return Map{0, "UNKNOWN", 0, MapDetails{Filename: ""}}
+func UnknownMap() LegacyMap {
+	return LegacyMap{0, "UNKNOWN", 0,
+		LegacyMapDetails{Filename: ""}}
 }

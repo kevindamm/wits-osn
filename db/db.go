@@ -37,18 +37,11 @@ import (
 type OsnDB interface {
 	Close() // also closes the SqlDB and any prepared statements
 
-	InsertPlayer(*osn.Player) error
-	InsertMatch(*osn.LegacyMatch) error
-	InsertStanding(osn.PlayerStanding, int, int) error
+	Maps() ([]LegacyMap, error)
 
-	AllMaps() ([]osn.Map, error)
-	Map(id int8) (osn.Map, error)
-	MapByName(name string) (osn.Map, error)
-
-	Player(id int64) (osn.Player, error)
-	PlayerByName(name string) (osn.Player, error)
-
-	MatchByHash(hash string) (osn.LegacyMatch, error)
+	Players() Table[*PlayerRecord]
+	Matches() Table[*LegacyMatchRecord]
+	Standings() Table[*StandingsRecord]
 }
 
 // Opens a Sqlite db at indicated path and prepares queries.
@@ -89,7 +82,7 @@ func open_database(filepath string) (*osndb, error) {
 	osndb.leagues = MakeEnumTable("player_leagues", osn.LeagueRange)
 	osndb.races = MakeEnumTable("races", osn.UnitRaceRange)
 
-	osndb.maps = Table[LegacyMap]{Name: "maps", Primary: "map_id"}
+	osndb.maps = MakeTable[LegacyMap]("maps", "map_id", "map_name")
 
 	return osndb, nil
 }
@@ -99,80 +92,6 @@ func open_database(filepath string) (*osndb, error) {
 func (osndb *osndb) PrepareQueries() error {
 	var err error = nil
 	db := osndb.sqldb
-
-	osndb.insertPlayer, err = db.Prepare(`INSERT INTO
-	  players (id, name)
-		VALUES (?, ?)`)
-	if err != nil {
-		return err
-	}
-
-	osndb.insertPlayerGCID, err = db.Prepare(`UPDATE players
-		SET gcid = ?
-		WHERE id = ?;`)
-	if err != nil {
-		return err
-	}
-
-	osndb.insertMatch, err = db.Prepare(`INSERT INTO
-		matches (match_hash, competitive, season, start_time,
-		  map_id, turn_count, version, status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-	if err != nil {
-		return err
-	}
-
-	osndb.insertPlayerRole, err = db.Prepare(`INSERT INTO
-	  roles (match_id, player_id, turn_order)
-		VALUES (?, ?, ?);`)
-	if err != nil {
-		return err
-	}
-
-	osndb.insertStanding, err = db.Prepare(`INSERT INTO
-	  standings (after, player_league, player_rank, player_points, player_delta)
-		VALUES (?, ?, ?, ?, ?)
-	`)
-	if err != nil {
-		return err
-	}
-
-	osndb.updatePrevStanding, err = db.Prepare(`UPDATE standings
-		SET until = ?
-		WHERE after = ?;`)
-	if err != nil {
-		return err
-	}
-
-	osndb.selectPlayerByID, err = db.Prepare(`SELECT *
-	  FROM players
-	  WHERE id = ?;`)
-	if err != nil {
-		return err
-	}
-
-	osndb.selectPlayerByName, err = db.Prepare(`SELECT *
-	  FROM players
-	  WHERE name = ?;`)
-	if err != nil {
-		return err
-	}
-
-	osndb.selectMatchByHash, err = db.Prepare(`SELECT
-		rowid, *
-		FROM matches
-		WHERE match_hash = ?;`)
-	if err != nil {
-		return err
-	}
-
-	osndb.selectRolesForMatch, err = db.Prepare(`SELECT
-	  rowid, player_id, turn_order
-	  FROM roles
-		WHERE match_id = ?;`)
-	if err != nil {
-		return err
-	}
 
 	return nil
 }
@@ -189,55 +108,16 @@ type osndb struct {
 	//map_names TableIndex[LegacyMap, string]
 
 	// writable tables
+	players      Table[*osn.Player]
+	matches      Table[*osn.LegacyMatch]
+	player_roles Table[*osn.PlayerRole]
+	standings    Table[*osn.PlayerStanding]
 
-	cachedMaps    map[int8]osn.Map
-	cachedPlayers map[int64]osn.Player
-
-	insertPlayer       *sql.Stmt
-	insertPlayerGCID   *sql.Stmt
-	insertMatch        *sql.Stmt
-	insertPlayerRole   *sql.Stmt
-	insertStanding     *sql.Stmt
-	updatePrevStanding *sql.Stmt
-
-	selectPlayerByID    *sql.Stmt
-	selectPlayerByName  *sql.Stmt
-	selectMatchByHash   *sql.Stmt
-	selectRolesForMatch *sql.Stmt
+	// local caches (TODO modify table type)
 }
 
 func (db *osndb) Close() {
-	if db.insertPlayer != nil {
-		db.insertPlayer.Close()
-	}
-	if db.insertPlayerGCID != nil {
-		db.insertPlayerGCID.Close()
-	}
-	if db.insertMatch != nil {
-		db.insertMatch.Close()
-	}
-	if db.insertPlayerRole != nil {
-		db.insertPlayerRole.Close()
-	}
-	if db.insertStanding != nil {
-		db.insertStanding.Close()
-	}
-	if db.updatePrevStanding != nil {
-		db.updatePrevStanding.Close()
-	}
-	if db.selectPlayerByID != nil {
-		db.selectPlayerByID.Close()
-	}
-	if db.selectPlayerByName != nil {
-		db.selectPlayerByName.Close()
-	}
-	if db.selectMatchByHash != nil {
-		db.selectMatchByHash.Close()
-	}
-	if db.selectRolesForMatch != nil {
-		db.selectRolesForMatch.Close()
-	}
-
+	// TODO close open statements & rows, cancel any pending contexts
 	db.sqldb.Close()
 }
 

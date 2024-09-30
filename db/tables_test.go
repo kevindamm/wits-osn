@@ -18,43 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-// github:kevindamm/wits-osn/player_standing.go
+// github:kevindamm/wits-osn/db/enum_test.go
 
-package osn
-
-import "fmt"
-
-// An ELO-like measurement and a current league + standings.
-type PlayerStanding interface {
-	League() LeagueEnum
-	Rank() LeagueRank
-
-	PointsBefore() uint16
-	PointsAfter() uint16
-	Delta() int8
-}
-
-func NewStanding(league LeagueEnum, rank LeagueRank, points uint16, delta int8) (PlayerStanding, error) {
-	if !league.IsValid() {
-		return nil, fmt.Errorf("invalid league value %d", league)
-	}
-	if !rank.IsValid() {
-		return nil, fmt.Errorf("invalid rank value %d", rank)
-	}
-	return standing{league, rank, points, delta}, nil
-}
-
-type standing struct {
-	league LeagueEnum
-	rank   LeagueRank
-	points uint16
-	delta  int8
-}
-
-func (ranked standing) League() LeagueEnum  { return ranked.league }
-func (ranked standing) Rank() LeagueRank    { return ranked.rank }
-func (ranked standing) PointsAfter() uint16 { return ranked.points }
-func (ranked standing) Delta() int8         { return ranked.delta }
-func (ranked standing) PointsBefore() uint16 {
-	return uint16(int(ranked.points) - int(ranked.delta))
-}
+package db_test

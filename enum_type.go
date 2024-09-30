@@ -36,7 +36,16 @@ type EnumType interface {
 	~uint8
 	fmt.Stringer
 
-	// Returns true if the represented value is valid;
-	// the uint8(0) value ("UNKNOWN") should also be considered valid.
+	// Returns true if the represented value is valid.
+	// The uint8(0) value ("UNKNOWN") is also considered valid.
 	IsValid() bool
+}
+
+// Convenience method for listing the enum values from UNKNOWN (0) to its LIMIT.
+func EnumValuesFor[T EnumType](limit T) []T {
+	values := make([]T, limit)
+	for i := range limit {
+		values[i] = T(i)
+	}
+	return values
 }

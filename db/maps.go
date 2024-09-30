@@ -32,16 +32,7 @@ import (
 	osn "github.com/kevindamm/wits-osn"
 )
 
-// OSN map representation, identifies the layout and placement of initial play.
-type LegacyMap struct {
-	MapID uint8  `json:"map_id"`
-	Name  string `json:"name"`
-
-	// uses a player count of 0 for a deprecated map
-	PlayerCount int
-
-	MapDetails
-}
+type LegacyMap osn.LegacyMap
 
 func (LegacyMap) SqlCreate(tablename string) string {
 	return fmt.Sprintf(`CREATE TABLE "%s" (
@@ -97,7 +88,7 @@ func (LegacyMap) SqlInit(tablename string) []string {
 }
 
 func (gamemap LegacyMap) Details() []byte {
-	bytes, err := json.Marshal(gamemap.MapDetails)
+	bytes, err := json.Marshal(gamemap.LegacyMapDetails)
 	if err != nil {
 		log.Fatalf("error marshaling legacy map details\n%s", err)
 	}
@@ -126,8 +117,8 @@ type MapDetails struct {
 	Height   int              `json:"rows"`
 }
 
-func (db *osndb) AllMaps() ([]osn.Map, error) {
-	maps := make([]osn.Map, 0)
+func (db *osndb) AllMaps() ([]osn.LegacyMap, error) {
+	maps := make([]osn.LegacyMap, 0)
 
 	stmt, err := db.sqldb.Prepare(`SELECT
 	  map_id, map_name, player_count, map_filename, map_theme, width, height
@@ -142,7 +133,7 @@ func (db *osndb) AllMaps() ([]osn.Map, error) {
 	}
 	defer rows.Close()
 
-	mapobj := osn.Map{}
+	mapobj := osn.LegacyMap{}
 	for rows.Next() {
 		// map_id, map_name, player_count, map_filename, map_theme, width, height
 		rows.Scan(
