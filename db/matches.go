@@ -54,11 +54,12 @@ func (record LegacyMatchRecord) ToValues() ([]driver.Value, error) {
 // players.  This differs from the serialized replays that define all of
 // each game's turns, or `roles` which uniquely indexes the players to
 // their involvement in the match.
-type matches_table struct {
+type tableMatches struct {
 	table[LegacyMatchRecord]
+	cached map[osn.GameID]osn.LegacyMatch
 }
 
-func (matches_table) SqlCreate() string {
+func (tableMatches) SqlCreate() string {
 	return `CREATE TABLE "matches" (
     -- rowid INTEGER PRIMARY KEY AUTOINCREMENT, -- legacy "id" or Index
     "match_hash"   TEXT NOT NULL UNIQUE,
@@ -81,7 +82,7 @@ func (matches_table) SqlCreate() string {
   );`
 }
 
-func (matches_table) SqlInit() string {
+func (tableMatches) SqlInit() string {
 	return `CREATE UNIQUE INDEX match_hashes ON matches (match_hash);`
 }
 
@@ -101,6 +102,52 @@ func (matches_table) SqlInit() string {
 //		return err
 //	}
 
+type PlayerRoleRecord osn.PlayerRole
+
+func (PlayerRoleRecord) Columns() []string {
+	return []string{"match_id", "player_id", "turn_order"}
+}
+
+func (record PlayerRoleRecord) ScanRow(*sql.Row) error {
+
+	// TODO
+	return nil
+}
+
+func (record PlayerRoleRecord) ToValues() ([]driver.Value, error) {
+
+	// TODO
+	return []driver.Value{}, nil
+}
+
+type tableRoles struct {
+	table[*PlayerRoleRecord]
+}
+
+var PlayerRoleSchema = []string{
+	// Relation for which players are participating in which matches,
+	// and the turn order they are assigned to.
+	// Appropriate for both 1v1 and 2v2 matches.
+	`CREATE TABLE "roles" (
+      -- rowid INTEGER PRIMARY KEY,
+      "match_id" INTEGER NOT NULL,
+      "player_id" INTEGER NOT NULL,
+      "turn_order" INTEGER CHECK(turn_order > 0 AND turn_order <= 2),
+
+      FOREIGN KEY (match_id)
+        REFERENCES matches (rowid)
+        ON DELETE CASCADE
+        ON UPDATE NO ACTION,
+      FOREIGN KEY (player_id)
+        REFERENCES players (rowid)
+        ON DELETE CASCADE
+        ON UPDATE NO ACTION,
+
+      UNIQUE (match_id, turn_order) ON CONFLICT FAIL,
+      UNIQUE (match_id, player_id) ON CONFLICT IGNORE
+    );`,
+}
+
 //	osndb.insertPlayerRole, err = db.Prepare(`INSERT INTO
 //	  roles (match_id, player_id, turn_order)
 //		VALUES (?, ?, ?);`)
@@ -115,5 +162,3 @@ func (matches_table) SqlInit() string {
 //	if err != nil {
 //		return err
 //	}
-
-type StandingsRecord osn.PlayerStanding

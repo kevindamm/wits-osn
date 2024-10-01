@@ -22,14 +22,30 @@
 
 package osn
 
+import (
+	"database/sql/driver"
+	"encoding/json"
+	"errors"
+)
+
 type LegacyMap struct {
 	MapID int8   `json:"map_id"`
 	Name  string `json:"name"`
 
-	// uses a player count of 0 for a deprecated map
-	PlayerCount int
+	// The number of players this map can accommodate.
+	// Use 0 for a player count on deprecated maps
+	PlayerCount int `json:"player_count"`
 
-	LegacyMapDetails
+	// Embedded type avoids the extra indirection
+	// while facilitating compact table representation.
+	LegacyMapDetails `json:"details,omitempty"`
+}
+
+func UnknownMap() LegacyMap {
+	terrain := make([]byte, 0)
+	units := make([]byte, 0)
+	return LegacyMap{0, "UNKNOWN", 0,
+		LegacyMapDetails{Filename: "", Terrain: terrain, Units: units}}
 }
 
 type LegacyMapDetails struct {
@@ -41,7 +57,16 @@ type LegacyMapDetails struct {
 	Height   int    `json:"rows"`
 }
 
-func UnknownMap() LegacyMap {
-	return LegacyMap{0, "UNKNOWN", 0,
-		LegacyMapDetails{Filename: ""}}
+// Hands the structure to a database driver using JSON serializagion.
+func (details LegacyMapDetails) Value() (driver.Value, error) {
+	return json.Marshal(details)
+}
+
+// Recovers the structure from a database driver using JSON deserialization.
+func (details *LegacyMapDetails) Scan(value driver.Value) error {
+	bytes, ok := value.([]byte)
+	if !ok {
+		return errors.New("invalid DB-value representation for LegacyMapDetails")
+	}
+	return json.Unmarshal(bytes, details)
 }

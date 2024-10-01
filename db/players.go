@@ -51,11 +51,12 @@ func (player *PlayerRecord) ToValues() ([]driver.Value, error) {
 	return []driver.Value{}, nil
 }
 
-type players_table struct {
+type tablePlayers struct {
 	table[*PlayerRecord]
+	cached map[int64]StandingsRecord
 }
 
-func (players_table) SqlCreate() string {
+func (tablePlayers) SqlCreate() string {
 	return `CREATE TABLE "players" (
     "id"    INTEGER PRIMARY KEY,
     "gcid"  TEXT UNIQUE,
@@ -63,80 +64,11 @@ func (players_table) SqlCreate() string {
   ) WITHOUT ROWID;`
 }
 
-func (players_table) SqlInit() string {
+func (tablePlayers) SqlInit() string {
 	return `
   INSERT INTO players (id, gcid, name) VALUES (0, NULL, "UNKNOWN");
 	
   CREATE UNIQUE INDEX player_names ON players (name);`
-}
-
-type PlayerRoleRecord osn.PlayerRole
-
-func (PlayerRoleRecord) Columns() []string {
-	return []string{"match_id", "player_id", "turn_order"}
-}
-
-func (record PlayerRoleRecord) ScanRow(*sql.Row) error {
-
-	// TODO
-	return nil
-}
-
-func (record PlayerRoleRecord) ToValues() ([]driver.Value, error) {
-
-	// TODO
-	return []driver.Value{}, nil
-}
-
-type player_roles_table struct {
-	table[*PlayerRoleRecord]
-}
-
-var PlayerRoleSchema = []string{
-	// Relation for which players are participating in which matches,
-	// and the turn order they are assigned to.
-	// Appropriate for both 1v1 and 2v2 matches.
-	`CREATE TABLE "roles" (
-      -- rowid INTEGER PRIMARY KEY,
-      "match_id" INTEGER NOT NULL,
-      "player_id" INTEGER NOT NULL,
-      "turn_order" INTEGER CHECK(turn_order > 0 AND turn_order <= 2),
-
-      FOREIGN KEY (match_id)
-        REFERENCES matches (rowid)
-        ON DELETE CASCADE
-        ON UPDATE NO ACTION,
-      FOREIGN KEY (player_id)
-        REFERENCES players (rowid)
-        ON DELETE CASCADE
-        ON UPDATE NO ACTION,
-
-      UNIQUE (match_id, turn_order) ON CONFLICT FAIL,
-      UNIQUE (match_id, player_id) ON CONFLICT IGNORE
-    );`,
-}
-
-var PlayerStandingsSchema = []string{
-	`CREATE TABLE "standings" (
-      -- rowid INTEGER PRIMARY KEY,
-      "after" INTEGER NOT NULL UNIQUE,
-      "until" INTEGER,
-
-      "player_league" INTEGER NOT NULL,
-      "player_rank"   INTEGER NOT NULL,
-      "player_points" INTEGER DEFAULT 0,
-      "player_delta"  INTEGER DEFAULT 0,
-
-      FOREIGN KEY (after)
-        REFERENCES roles (rowid)
-        ON DELETE CASCADE ON UPDATE NO ACTION,
-      FOREIGN KEY (until)
-        REFERENCES roles (rowid)
-        ON DELETE CASCADE ON UPDATE NO ACTION,
-      FOREIGN KEY (player_league)
-        REFERENCES leagues (league_id)
-        ON DELETE CASCADE ON UPDATE NO ACTION
-    );`,
 }
 
 //	osndb.insertPlayer, err = db.Prepare(`INSERT INTO
@@ -153,6 +85,74 @@ var PlayerStandingsSchema = []string{
 //		return err
 //	}
 
+//	osndb.selectPlayerByID, err = db.Prepare(`SELECT *
+//	  FROM players
+//	  WHERE id = ?;`)
+//	if err != nil {
+//		return err
+//	}
+//
+//	osndb.selectPlayerByName, err = db.Prepare(`SELECT *
+//	  FROM players
+//	  WHERE name = ?;`)
+//	if err != nil {
+//		return err
+//	}
+
+type StandingsRecord osn.PlayerStanding
+
+func (*StandingsRecord) Columns() []string {
+	return []string{
+		"after", "until",
+		"player_league",
+		"player_rank",
+		"player_points",
+		"player_delta",
+	}
+}
+
+func (record *StandingsRecord) ScanRow(row *sql.Row) error {
+	// TODO
+	return nil
+}
+
+func (record *StandingsRecord) ToValues() ([]driver.Value, error) {
+	// TODO
+	return []driver.Value{}, nil
+}
+
+type tableStandings struct {
+	table[*StandingsRecord]
+	cached map[int64]StandingsRecord
+}
+
+func (tableStandings) SqlCreate() string {
+	return `CREATE TABLE "standings" (
+    -- rowid INTEGER PRIMARY KEY,
+    "after" INTEGER NOT NULL UNIQUE,
+    "until" INTEGER,
+
+    "player_league" INTEGER NOT NULL,
+    "player_rank"   INTEGER NOT NULL,
+    "player_points" INTEGER DEFAULT 0,
+    "player_delta"  INTEGER DEFAULT 0,
+
+    FOREIGN KEY (after)
+      REFERENCES roles (rowid)
+      ON DELETE CASCADE ON UPDATE NO ACTION,
+    FOREIGN KEY (until)
+      REFERENCES roles (rowid)
+      ON DELETE CASCADE ON UPDATE NO ACTION,
+    FOREIGN KEY (player_league)
+      REFERENCES leagues (league_id)
+      ON DELETE CASCADE ON UPDATE NO ACTION
+  );`
+}
+
+func (tableStandings) SqlInit() string {
+	return ""
+}
+
 //	osndb.insertStanding, err = db.Prepare(`INSERT INTO
 //	  standings (after, player_league, player_rank, player_points, player_delta)
 //		VALUES (?, ?, ?, ?, ?)
@@ -164,20 +164,6 @@ var PlayerStandingsSchema = []string{
 //	osndb.updatePrevStanding, err = db.Prepare(`UPDATE standings
 //		SET until = ?
 //		WHERE after = ?;`)
-//	if err != nil {
-//		return err
-//	}
-
-//	osndb.selectPlayerByID, err = db.Prepare(`SELECT *
-//	  FROM players
-//	  WHERE id = ?;`)
-//	if err != nil {
-//		return err
-//	}
-//
-//	osndb.selectPlayerByName, err = db.Prepare(`SELECT *
-//	  FROM players
-//	  WHERE name = ?;`)
 //	if err != nil {
 //		return err
 //	}

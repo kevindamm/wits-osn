@@ -26,6 +26,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 )
@@ -38,30 +39,22 @@ type Record interface {
 	ToValues() ([]driver.Value, error)
 }
 
-// Common interface for one or more database tables
-type Table[T Record] interface {
+type TableSql interface {
 	Name() string
-	Zero() Record
-
 	SqlCreate() string
 	SqlInit() string
+}
+
+// Common interface for one or more database tables
+type Table[T Record] interface {
+	TableSql
+	Zero() T
 
 	Insert(*T) error
-	Get(id uint64) (T, error)
-	GetNamed(name string) (T, error)
-	SelectAll() (<-chan T, error)
+	Get(uint64) (T, error)
+	GetByName(string) (T, error)
+	SelectAll() *sql.Rows
 }
-
-// Abstraction over one or more relational tables,
-// represents an atomic structural type.
-type table[T Record] struct {
-	name string
-	zero T
-	PK   string
-}
-
-func (table table[T]) Name() string { return table.name }
-func (table table[T]) Zero() T      { return table.zero }
 
 // Only needs to be called once at database setup.  Also closes the database.
 // Will LOG(FATAL) an error if creation or initialization fail, with SQL error.
@@ -72,14 +65,14 @@ func CreateTablesAndClose(db_path string) error {
 	}
 	defer witsdb.Close()
 
-	for _, table := range []Table[Record]{
-		witsdb.status,
-		witsdb.leagues,
-		witsdb.races,
+	for _, table := range []TableSql{
+		witsdb.status.table,
+		witsdb.leagues.table,
+		witsdb.races.table,
 		witsdb.maps,
 		witsdb.players,
 		witsdb.matches,
-		witsdb.player_roles,
+		witsdb.roles,
 		witsdb.standings,
 	} {
 		log.Println("creating table '" + table.Name() + "'")
@@ -96,6 +89,102 @@ func CreateTablesAndClose(db_path string) error {
 	}
 
 	return nil
+}
+
+// Abstraction over one or more relational tables,
+// represents an atomic structural type.
+type table[T Record] struct {
+	sqldb *sql.DB
+	name  string
+	zero  T
+
+	// Simplification for now, as these tables don't have complicated queries.
+	// There are a couple of places with joins but ScanRow() is still simple-ish.
+	// Mainly the foreign key constraints and indices are a sanity check on data.
+	Primary string
+	NameCol string
+}
+
+func (table table[T]) Name() string { return table.name }
+func (table table[T]) Zero() T      { return table.zero }
+
+func (table table[T]) Get(id uint64) (T, error) {
+	var (
+		record T
+		err    error
+	)
+	rowid := table.Primary
+	if rowid == "" {
+		rowid = "rowid"
+	}
+	colstring := "(" + strings.Join(record.Columns(), ", ") + ")"
+
+	sql := fmt.Sprintf(
+		`SELECT %s FROM %s WHERE %s = ?;`,
+		colstring, table.name, rowid)
+
+	row := table.sqldb.QueryRow(sql, id)
+	if err != nil {
+		return record, err
+	}
+	err = record.ScanRow(row)
+	return record, err
+}
+
+// Retrieves the single row
+func (table table[T]) GetByName(name string) (T, error) {
+	var (
+		record T
+		err    error
+	)
+	namecol := table.NameCol
+	if namecol == "" {
+		namecol = "name"
+	}
+	colstring := "(" + strings.Join(record.Columns(), ", ") + ")"
+
+	sql := fmt.Sprintf(
+		`SELECT %s FROM %s WHERE %s = ?;`,
+		colstring, table.name, namecol)
+
+	row := table.sqldb.QueryRow(sql, name)
+	if err != nil {
+		return record, err
+	}
+	err = record.ScanRow(row)
+	return record, err
+}
+
+// If the record's ID is 0 it will be updated with the index it was assigned.
+// When a non-zero value is used as the record's primary key, if that record
+// already existed it returns an error.
+func (table table[T]) Insert(record *T) error {
+	// TODO
+	return nil
+}
+
+// Returns the results of a `SELECT * FROM ?table.Name;` on the receiver ?table.
+//
+// If there is an error executing the "SELECT *" query (e.g., the table was
+// dropped or not yet created) it will be surfaced in *sql.Rows which will
+// always be non-nil (as per [database/sql.)
+func (table table[T]) SelectAll() *sql.Rows {
+	// TODO
+	return nil
+}
+
+func (table table[T]) SqlCreate() string {
+	// TODO derive this from Columns and Zero.NamedValues
+	return fmt.Sprintf(`CREATE TABLE "%s" (
+	  "%s" INTEGER PRIMARY KEY,
+		"%s" TEXT NOT NULL
+	) WITHOUT ROWID;`,
+		table.Name, table.Primary, table.NameCol)
+}
+
+func (table table[T]) SqlInit() string {
+	// TODO replace this method with explicit initialization in [OpenOsnDB] ctor.
+	return ""
 }
 
 // Execute the SQL statement on the provided database.

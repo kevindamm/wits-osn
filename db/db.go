@@ -35,9 +35,9 @@ import (
 //
 // DB includes match metadata, map identities, player history and replay index.
 type OsnDB interface {
-	Close() // also closes the SqlDB and any prepared statements
+	Close() // Closes the database, including open rows and prepared statements.
 
-	Maps() ([]LegacyMap, error)
+	Map(name string) (LegacyMap, error)
 
 	Players() Table[*PlayerRecord]
 	Matches() Table[*LegacyMatchRecord]
@@ -48,17 +48,30 @@ type OsnDB interface {
 // Does not create tables, only prepares the connection and statements.
 //
 // Asserts db exists and basic queries can be constructed.
-// LOG(FATAL) on any error, database is returned unmodified.
+// LOG(FATAL) on any error, database remains unmodified.
 func OpenOsnDB(filepath string) OsnDB {
 	osndb, err := open_database(filepath)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	if err = osndb.PrepareQueries(); err != nil {
-		log.Fatal(err)
-	}
 	return OsnDB(osndb)
+}
+
+type osndb struct {
+	sqldb *sql.DB
+
+	// read-only tables
+	status  EnumTable[osn.FetchStatus]
+	leagues EnumTable[osn.LeagueEnum]
+	races   EnumTable[osn.UnitRaceEnum]
+
+	maps Table[LegacyMap]
+
+	// writable tables
+	players   Table[*PlayerRecord]
+	matches   Table[*LegacyMatchRecord]
+	roles     Table[*PlayerRoleRecord]
+	standings Table[*StandingsRecord]
 }
 
 // Opens a connection to the database but does not prepare any queries.
@@ -78,42 +91,17 @@ func open_database(filepath string) (*osndb, error) {
 	osndb.sqldb = db
 
 	// We can initialize the table mappings without preparing queries.
-	osndb.status = MakeEnumTable("fetch_status", osn.FetchStatusRange)
-	osndb.leagues = MakeEnumTable("player_leagues", osn.LeagueRange)
-	osndb.races = MakeEnumTable("races", osn.UnitRaceRange)
+	osndb.status = MakeEnumTable("fetch_status",
+		osn.EnumValuesFor(osn.FetchStatusRange))
+	osndb.leagues = MakeEnumTable("player_leagues",
+		osn.EnumValuesFor(osn.LeagueRange))
+	osndb.races = MakeEnumTable("races",
+		osn.EnumValuesFor(osn.UnitRaceRange))
 
-	osndb.maps = MakeTable[LegacyMap]("maps", "map_id", "map_name")
+	osndb.maps = MakeMapsTable("maps")
+	//TODO players, roles, matches and standings tables.
 
 	return osndb, nil
-}
-
-// Prepares [*sql.Stmt] statements for this database interface.
-// (Automatically done if opening the database with [OpenOsnDB()] constructor.)
-func (osndb *osndb) PrepareQueries() error {
-	var err error = nil
-	db := osndb.sqldb
-
-	return nil
-}
-
-type osndb struct {
-	sqldb *sql.DB
-
-	// read-only tables
-	status  EnumTable[osn.FetchStatus]
-	leagues EnumTable[osn.LeagueEnum]
-	races   EnumTable[osn.UnitRaceEnum]
-
-	maps Table[LegacyMap]
-	//map_names TableIndex[LegacyMap, string]
-
-	// writable tables
-	players      Table[*osn.Player]
-	matches      Table[*osn.LegacyMatch]
-	player_roles Table[*osn.PlayerRole]
-	standings    Table[*osn.PlayerStanding]
-
-	// local caches (TODO modify table type)
 }
 
 func (db *osndb) Close() {
@@ -194,6 +182,35 @@ func (db *osndb) InsertPlayer(player *osn.Player) error {
 	}
 
 	return nil
+}
+
+func (db *osndb) AllMaps() ([]osn.LegacyMap, error) {
+	maps := make([]osn.LegacyMap, 0)
+
+	stmt, err := db.sqldb.Prepare(`SELECT
+	  map_id, map_name, player_count, map_filename, map_theme, width, height
+	  FROM maps
+		WHERE NOT deprecated;`)
+	if err != nil {
+		return maps, err
+	}
+	rows, err := stmt.Query()
+	if err != nil {
+		return maps, err
+	}
+	defer rows.Close()
+
+	mapobj := osn.LegacyMap{}
+	for rows.Next() {
+		// map_id, map_name, player_count, map_filename, map_theme, width, height
+		rows.Scan(
+			&mapobj.MapID, &mapobj.Name, &mapobj.PlayerCount,
+			&mapobj.Filename, &mapobj.Theme,
+			&mapobj.Width, &mapobj.Height)
+		maps = append(maps, mapobj)
+	}
+
+	return maps, nil
 }
 
 func (db *osndb) Map(id int8) (osn.Map, error) {

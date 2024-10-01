@@ -27,43 +27,77 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
-	"log"
+	"strings"
 
 	osn "github.com/kevindamm/wits-osn"
 )
 
 type LegacyMap osn.LegacyMap
 
-func (LegacyMap) SqlCreate(tablename string) string {
+func (LegacyMap) Columns() []string {
+	return []string{"map_id", "map_name", "player_count", "details"}
+}
+
+func (record LegacyMap) ScanRow(row *sql.Row) error {
+	bytes := make([]byte, 0)
+	row.Scan(&record.MapID, &record.Name, &record.PlayerCount, &bytes)
+	return json.Unmarshal(bytes, &record.LegacyMapDetails)
+}
+
+func (record LegacyMap) ToValues() ([]driver.Value, error) {
+	return []driver.Value{
+		record.MapID,
+		record.Name,
+		record.PlayerCount,
+		record.LegacyMapDetails,
+	}, nil
+}
+
+type tableMaps struct {
+	table[LegacyMap]
+	cached map[string]LegacyMap
+}
+
+func MakeMapsTable(sqldb *sql.DB) Table[LegacyMap] {
+	return tableMaps{
+		table: table[LegacyMap]{
+			sqldb:   sqldb,
+			name:    "maps",
+			Primary: "map_id",
+			NameCol: "map_name"}}
+}
+
+func (table tableMaps) SqlCreate() string {
 	return fmt.Sprintf(`CREATE TABLE "%s" (
       "map_id"        INTEGER PRIMARY KEY,
       "map_name"      VARCHAR(127) NOT NULL,
-      "player_count"  INTEGER CHECK(player_count == 2 OR player_count == 4),
+      "player_count"  INTEGER
+			  CHECK(player_count == 2 OR player_count == 4 OR player_count == 0),
 
-      -- The following could be collected into a JSON field.
-      "map_filename"  TEXT NOT NULL,
-      "map_theme"     INTEGER,
-      "map_json"      TEXT,
-      "width"         INTEGER,
-      "height"        INTEGER,
-
-      "deprecated"    BOOLEAN DEFAULT FALSE,
+			-- Represents the following details in JSON-encoded bytes.
+			"json"             BLOB
+      -- "map_filename"  TEXT NOT NULL,
+	    -- "theme"         INTEGER,
+	    -- "terrain"       BLOB,  -- array of (coordinates and floor/wall)
+	    -- "units"         BLOB,  -- array of (coordinates and unit type)
+      -- "width"         INTEGER,
+      -- "height"        INTEGER,
 
       FOREIGN KEY (map_theme) REFERENCES races (race_id)
         ON DELETE CASCADE ON UPDATE NO ACTION
-    ) WITHOUT ROWID;`, tablename)
+    ) WITHOUT ROWID;`, table.Name)
 }
 
-func (LegacyMap) SqlInit(tablename string) []string {
-	return []string{
+func (table tableMaps) SqlInit() string {
+	return strings.Join([]string{
 		fmt.Sprintf(`INSERT INTO %s VALUES
-	    (0, "MAP_UNKNOWN", NULL, "", 0, NULL, 0, 0, true);`, tablename),
+	    (0, "MAP_UNKNOWN", NULL, "", 0, NULL, 0, 0, true);`, table.Name),
 
 		fmt.Sprintf(`INSERT INTO %s
       (map_id, map_name, player_count, map_filename, map_theme, width, height)
     VALUES
       (1,      "Machination",       4, "machination",        1,    13,    13),
-      (2,      "Foundry (v1)",      2, "foundry",            1,    13,    12),
+      (2,      "Foundry (v1)",      0, "foundry",            1,    13,    12),
       (3,      "Foundry",           2, "foundry",            1,    13,    12),
       (4,      "Glitch",            2, "glitch",             1,    11,    11),
       (5,      "Candy Core Mine",   4, "candy-core-mine",    2,    13,    13),
@@ -79,69 +113,7 @@ func (LegacyMap) SqlInit(tablename string) []string {
       (15,     "War Garden",        2, "war-garden",         4,    13,    12),
       (16,     "Sweet Tooth",       2, "sweet-tooth",        2,    13,    10),
       (17,     "Sugar Rock",        4, "sugar-rock",         2,    13,    13),
-      (18,     "Mechanism",         4, "mechanism",          1,    13,    13);`,
-			tablename),
-
-		fmt.Sprintf(`UPDATE %s set deprecated = true WHERE map_id = 2;`,
-			tablename),
-	}
-}
-
-func (gamemap LegacyMap) Details() []byte {
-	bytes, err := json.Marshal(gamemap.LegacyMapDetails)
-	if err != nil {
-		log.Fatalf("error marshaling legacy map details\n%s", err)
-	}
-	return bytes
-}
-
-// TODO
-func (LegacyMap) IsValid() bool { return true }
-
-func (gamemap LegacyMap) ScanRecord(*sql.Row) error {
-	return nil
-}
-
-func (gamemap LegacyMap) RecordValues() ([]driver.Value, error) {
-	return []driver.Value{
-		gamemap.MapID, gamemap.Name, gamemap.PlayerCount, gamemap.Details(),
-	}, nil
-}
-
-type MapDetails struct {
-	Filename string           `json:"-"`
-	Theme    osn.UnitRaceEnum `json:"map_theme"`
-	Terrain  []byte           `json:"terrain,omitempty"`
-	Units    []byte           `json:"units,omitempty"`
-	Width    int              `json:"columns"`
-	Height   int              `json:"rows"`
-}
-
-func (db *osndb) AllMaps() ([]osn.LegacyMap, error) {
-	maps := make([]osn.LegacyMap, 0)
-
-	stmt, err := db.sqldb.Prepare(`SELECT
-	  map_id, map_name, player_count, map_filename, map_theme, width, height
-	  FROM maps
-		WHERE NOT deprecated;`)
-	if err != nil {
-		return maps, err
-	}
-	rows, err := stmt.Query()
-	if err != nil {
-		return maps, err
-	}
-	defer rows.Close()
-
-	mapobj := osn.LegacyMap{}
-	for rows.Next() {
-		// map_id, map_name, player_count, map_filename, map_theme, width, height
-		rows.Scan(
-			&mapobj.MapID, &mapobj.Name, &mapobj.PlayerCount,
-			&mapobj.Filename, &mapobj.Theme,
-			&mapobj.Width, &mapobj.Height)
-		maps = append(maps, mapobj)
-	}
-
-	return maps, nil
+      (18,     "Mechanism",         4, "mechanism",          1,    13,    13)`,
+			table.Name),
+	}, ";\n")
 }

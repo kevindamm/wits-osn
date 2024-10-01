@@ -24,37 +24,33 @@ package osn
 
 import "fmt"
 
-// An ELO-like measurement and a current league + standings.
-type PlayerStanding interface {
-	League() LeagueEnum
-	Rank() LeagueRank
-
-	PointsBefore() uint16
-	PointsAfter() uint16
-	Delta() int8
+// An ELO-like measurement [points], and the player's league + standings status.
+type PlayerStanding struct {
+	league LeagueEnum
+	rank   LeagueRank
+	points uint16
+	delta  int8 // difference since [points] of previous standings.
 }
 
 func NewStanding(league LeagueEnum, rank LeagueRank, points uint16, delta int8) (PlayerStanding, error) {
 	if !league.IsValid() {
-		return nil, fmt.Errorf("invalid league value %d", league)
+		return UnknownStanding(), fmt.Errorf("invalid league value %d", league)
 	}
 	if !rank.IsValid() {
-		return nil, fmt.Errorf("invalid rank value %d", rank)
+		return UnknownStanding(), fmt.Errorf("invalid rank value %d", rank)
 	}
-	return standing{league, rank, points, delta}, nil
+	return PlayerStanding{league, rank, points, delta}, nil
 }
 
-type standing struct {
-	league LeagueEnum
-	rank   LeagueRank
-	points uint16
-	delta  int8
-}
+func (ranked PlayerStanding) League() LeagueEnum  { return ranked.league }
+func (ranked PlayerStanding) Rank() LeagueRank    { return ranked.rank }
+func (ranked PlayerStanding) PointsAfter() uint16 { return ranked.points }
+func (ranked PlayerStanding) Delta() int8         { return ranked.delta }
 
-func (ranked standing) League() LeagueEnum  { return ranked.league }
-func (ranked standing) Rank() LeagueRank    { return ranked.rank }
-func (ranked standing) PointsAfter() uint16 { return ranked.points }
-func (ranked standing) Delta() int8         { return ranked.delta }
-func (ranked standing) PointsBefore() uint16 {
+func (ranked PlayerStanding) PointsBefore() uint16 {
 	return uint16(int(ranked.points) - int(ranked.delta))
+}
+
+func UnknownStanding() PlayerStanding {
+	return PlayerStanding{}
 }

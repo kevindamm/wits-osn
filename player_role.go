@@ -25,12 +25,17 @@ package osn
 // Represents an assignment of a Player (identifier) with match participation.
 type PlayerRole struct {
 	Player    `json:"player" orm:"fk(players)"`
-	UnitRace  UnitRaceEnum    `orm:"fk(races)"`
-	BaseTheme int             `json:"theme"`
-	TurnOrder PlayerColorEnum `orm:"turn_order"`
+	UnitRace  UnitRaceEnum    `json:"race" orm:"fk(races)"`
+	BaseTheme int             `json:"theme" orm:"-"`
+	TurnOrder PlayerColorEnum `json:"color" orm:"turn_order"`
 
-	AP int `json:"wits"`
+	// The remaining actions for the player at the latest turn.
+	//
+	// This is useful for maintaining a view of the state derived from all of the
+	// player's previous turns but doesn't need to be persisted in the database.
+	Actions uint `json:"wits" orm:"-"`
 
-	RankBefore PlayerStanding `json:"rank_prev" orm:"rank_until=fk(standings)"`
-	RankAfter  PlayerStanding `json:"rank_next,omitempty" orm:"rank_after=fk(standings)"`
+	// These are derived from the standings table which refer to the role record.
+	RankBefore PlayerStanding `json:"rank_prev" orm:"--from fk(standings.until)"`
+	RankAfter  PlayerStanding `json:"rank_next,omitempty" orm:"--from fk(standings.after)"`
 }

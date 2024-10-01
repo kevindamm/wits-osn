@@ -26,8 +26,6 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
-	"fmt"
-	"strings"
 
 	osn "github.com/kevindamm/wits-osn"
 )
@@ -37,7 +35,7 @@ import (
 // inside a single byte.  If the domain is larger than 255 items, express that
 // relation as a [Table[T Record]], named by a [TableIndex[Record, comparable]].
 type EnumTable[T osn.EnumType] struct {
-	table[EnumRecord[T]]
+	table[Record]
 
 	values []T
 	naming map[string]T
@@ -50,7 +48,11 @@ func MakeEnumTable[T osn.EnumType](tablename string, values []T) EnumTable[T] {
 		naming[string(t)] = t
 	}
 	return EnumTable[T]{
-		table[EnumRecord[T]]{name: tablename, PK: "id"},
+		table[Record]{
+			name:    tablename,
+			zero:    EnumRecord[T]{values[0]},
+			Primary: "id",
+			NameCol: "name"},
 		values,
 		naming}
 }
@@ -68,40 +70,42 @@ func (table EnumTable[T]) Strings() []string {
 	return strings
 }
 
-func (table EnumTable[T]) SqlCreate() string {
-	return fmt.Sprintf(`CREATE TABLE "%s" (
-    "id"    INTEGER PRIMARY KEY,
-    "name"  TEXT NOT NULL
-  ) WITHOUT ROWID;`, table.Name)
-}
+//	func (table EnumTable[T]) SqlCreate() string {
+//		return fmt.Sprintf(`CREATE TABLE "%s" (
+//	   "id"    INTEGER PRIMARY KEY,
+//	   "name"  TEXT NOT NULL
+//	 ) WITHOUT ROWID;`, table.Name)
+//	}
+//
+//	func (table EnumTable[T]) SqlInit() string {
+//		rows := make([]string, len(table.values))
+//		for i, value := range table.values {
+//			rows[i] = fmt.Sprintf(`(%d, "%s")`, value, value)
+//		}
+//		return fmt.Sprintf(`INSERT INTO %s VALUES %s;`,
+//			table.Name, strings.Join(rows, ", "))
+//	}
 
-func (table EnumTable[T]) SqlInit() string {
-	rows := make([]string, len(table.values))
-	for i, value := range table.values {
-		rows[i] = fmt.Sprintf(`(%d, "%s")`, value, value)
-	}
-	return fmt.Sprintf(`INSERT INTO %s VALUES %s;`,
-		table.Name, strings.Join(rows, ", "))
-}
-
-func (table EnumTable[T]) Insert(record *T) error {
+// Insert a record based on its
+func (table EnumTable[T]) Insert(record *Record) error {
 	// TODO
 	return nil
 }
 
-func (table EnumTable[T]) Get(id uint64) (EnumRecord[T], error) {
+func (table EnumTable[T]) Get(id uint64) (Record, error) {
 	// TODO
 	return table.Zero(), nil
 }
 
-func (table EnumTable[T]) GetNamed(name string) (EnumRecord[T], error) {
+func (table EnumTable[T]) GetNamed(name string) (Record, error) {
 	// TODO
 	return table.Zero(), nil
 }
 
-func (table EnumTable[T]) SelectAll() (<-chan T, error) {
+func (table EnumTable[T]) SelectAll(records chan<- Record) error {
 	// TODO
-	return nil, nil
+	close(records)
+	return nil
 }
 
 // The record abstraction for enums is interesting because
