@@ -26,6 +26,8 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
+	"strings"
 
 	osn "github.com/kevindamm/wits-osn"
 )
@@ -35,7 +37,7 @@ import (
 // inside a single byte.  If the domain is larger than 255 items, express that
 // relation as a [Table[T Record]], named by a [TableIndex[Record, comparable]].
 type EnumTable[T osn.EnumType] struct {
-	table[Record]
+	tableBase[Record]
 
 	values []T
 	naming map[string]T
@@ -48,7 +50,7 @@ func MakeEnumTable[T osn.EnumType](tablename string, values []T) EnumTable[T] {
 		naming[string(t)] = t
 	}
 	return EnumTable[T]{
-		table[Record]{
+		tableBase[Record]{
 			name:    tablename,
 			zero:    EnumRecord[T]{values[0]},
 			Primary: "id",
@@ -70,42 +72,60 @@ func (table EnumTable[T]) Strings() []string {
 	return strings
 }
 
-//	func (table EnumTable[T]) SqlCreate() string {
-//		return fmt.Sprintf(`CREATE TABLE "%s" (
-//	   "id"    INTEGER PRIMARY KEY,
-//	   "name"  TEXT NOT NULL
-//	 ) WITHOUT ROWID;`, table.Name)
-//	}
-//
-//	func (table EnumTable[T]) SqlInit() string {
-//		rows := make([]string, len(table.values))
-//		for i, value := range table.values {
-//			rows[i] = fmt.Sprintf(`(%d, "%s")`, value, value)
-//		}
-//		return fmt.Sprintf(`INSERT INTO %s VALUES %s;`,
-//			table.Name, strings.Join(rows, ", "))
-//	}
-
-// Insert a record based on its
-func (table EnumTable[T]) Insert(record *Record) error {
-	// TODO
-	return nil
+func (table EnumTable[T]) SqlCreate() string {
+	return fmt.Sprintf(`CREATE TABLE "%s" (
+	   "id"    INTEGER PRIMARY KEY,
+	   "name"  TEXT NOT NULL
+	 ) WITHOUT ROWID;`, table.name)
 }
 
-func (table EnumTable[T]) Get(id uint64) (Record, error) {
-	// TODO
-	return table.Zero(), nil
+func (table EnumTable[T]) SqlInit() string {
+	rows := make([]string, len(table.values))
+	for i, value := range table.values {
+		rows[i] = fmt.Sprintf(`(%d, "%s")`, value, value)
+	}
+	return fmt.Sprintf(`INSERT INTO %s VALUES %s;`,
+		table.name, strings.Join(rows, ", "))
 }
 
-func (table EnumTable[T]) GetNamed(name string) (Record, error) {
-	// TODO
-	return table.Zero(), nil
+// EnumTable does not allow insertions,
+// but it provides the method to match [Table[T]].
+func (table EnumTable[T]) Insert(record *T) error {
+	return errors.New(
+		"enums are static, new insertions are not allowed for enum tables")
 }
 
-func (table EnumTable[T]) SelectAll(records chan<- Record) error {
-	// TODO
-	close(records)
-	return nil
+// Basic getter is equivalent to T(id) but this also validates.
+// Included to conform with the [Table[T]] interface.
+func (table EnumTable[T]) Get(id uint64) (T, error) {
+	value := T(id)
+	if value.IsValid() {
+		return value, nil
+	}
+	return T(0), fmt.Errorf("unrecognized value %d", id)
+}
+
+// Returns an EnumRecord[T] instance that matches the provided name.  If there
+// is no value T with that name, it returns the zero (assumed UNKNOWN) value.
+// Unlike the query-backed getter for [Table[T]], this never returns an error.
+func (table EnumTable[T]) GetNamed(name string) (T, error) {
+	if tval, ok := table.naming[name]; ok {
+		return tval, nil
+	}
+	return T(0), nil
+}
+
+// Enums are sent to the returned channel in a deterministic (0..limit) order.
+func (table EnumTable[T]) SelectAll() (chan<- T, error) {
+	tchan := make(chan T)
+	go func() {
+		defer close(tchan)
+		for _, tval := range table.values {
+			tchan <- tval
+		}
+	}()
+
+	return tchan, nil
 }
 
 // The record abstraction for enums is interesting because
@@ -119,12 +139,35 @@ func (EnumRecord[T]) Columns() []string {
 	return []string{"id", "name"}
 }
 
-func (record EnumRecord[T]) ScanRow(row *sql.Row) error {
-	return errors.New("enums are immutable")
-}
-
-func (record EnumRecord[T]) ToValues() ([]driver.Value, error) {
+func (record EnumRecord[T]) Values() ([]driver.Value, error) {
+	if !record.value.IsValid() {
+		return []driver.Value{}, fmt.Errorf("invalid value %d", record.value)
+	}
 	return []driver.Value{
 		uint8(record.value), string(record.value),
 	}, nil
+}
+
+func (record EnumRecord[T]) NamedValues() ([]driver.NamedValue, error) {
+	if !record.value.IsValid() {
+		return []driver.NamedValue{}, fmt.Errorf("invalid value %d", record.value)
+	}
+	return []driver.NamedValue{
+		{
+			Name:    "id",
+			Ordinal: 0,
+			Value:   uint8(record.value)},
+		{
+			Name:    "name",
+			Ordinal: 1,
+			Value:   string(record.value)},
+	}, nil
+}
+
+func (EnumRecord[T]) ScanValues(...driver.Value) error {
+	return errors.New("enums are immutable")
+}
+
+func (EnumRecord[T]) ScanRow(row *sql.Row) error {
+	return errors.New("enums are immutable")
 }

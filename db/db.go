@@ -24,7 +24,6 @@ package db
 
 import (
 	"database/sql"
-	"fmt"
 	"log"
 
 	osn "github.com/kevindamm/wits-osn"
@@ -37,7 +36,7 @@ import (
 type OsnDB interface {
 	Close() // Closes the database, including open rows and prepared statements.
 
-	Map(name string) (LegacyMap, error)
+	Map(name string) (osn.LegacyMap, error)
 
 	Players() Table[*PlayerRecord]
 	Matches() Table[*LegacyMatchRecord]
@@ -65,7 +64,7 @@ type osndb struct {
 	leagues EnumTable[osn.LeagueEnum]
 	races   EnumTable[osn.UnitRaceEnum]
 
-	maps Table[LegacyMap]
+	maps Table[LegacyMapRecord]
 
 	// writable tables
 	players   Table[*PlayerRecord]
@@ -98,8 +97,11 @@ func open_database(filepath string) (*osndb, error) {
 	osndb.races = MakeEnumTable("races",
 		osn.EnumValuesFor(osn.UnitRaceRange))
 
-	osndb.maps = MakeMapsTable("maps")
-	//TODO players, roles, matches and standings tables.
+	osndb.maps = MakeMapsTable(osndb.sqldb)
+	osndb.players = MakePlayersTable(osndb.sqldb)
+	osndb.matches = MakeMatchesTable(osndb.sqldb)
+	osndb.roles = MakeRolesTable(osndb.sqldb)
+	osndb.standings = MakeStandingsTable(osndb.sqldb)
 
 	return osndb, nil
 }
@@ -109,259 +111,11 @@ func (db *osndb) Close() {
 	db.sqldb.Close()
 }
 
-func (db *osndb) Player(id int64) (osn.Player, error) {
-	if db.cachedPlayers == nil {
-		db.cachedPlayers = make(map[int64]osn.Player)
-	}
-	if player, ok := db.cachedPlayers[id]; ok {
-		return player, nil
-	}
-
-	row, err := db.selectPlayerByID.Query(id)
-	if err != nil {
-		return osn.UNKNOWN_PLAYER, err
-	}
-	defer row.Close()
-	if !row.Next() {
-		return osn.UNKNOWN_PLAYER, fmt.Errorf("no player with ID %d", id)
-	}
-
-	player := osn.Player{}
-	err = row.Scan(&player.RowID, &player.Name)
-	if err != nil {
-		return player, err
-	}
-
-	// TODO also retrieve latest standings if present
-
-	return player, nil
+func (db *osndb) Map(name string) (osn.LegacyMap, error) {
+	// TODO
+	return osn.UnknownMap(), nil
 }
 
-func (db *osndb) PlayerByName(name string) (osn.Player, error) {
-	player := osn.UNKNOWN_PLAYER
-	row, err := db.selectPlayerByName.Query(name)
-	if err != nil {
-		return player, err
-	}
-	defer row.Close()
-	if !row.Next() {
-		return player, fmt.Errorf("no player with name %s", name)
-	}
-
-	err = row.Scan(&player.RowID, &player.GCID, &player.Name)
-	if err != nil {
-		return player, err
-	}
-	return player, nil
-}
-
-func (db *osndb) InsertPlayer(player *osn.Player) error {
-	if db.cachedPlayers == nil {
-		db.cachedPlayers = make(map[int64]osn.Player)
-	}
-	if _, ok := db.cachedPlayers[player.RowID]; !ok {
-		result, err := db.insertPlayer.Exec(player.RowID, player.Name)
-		if err != nil {
-			return err
-		}
-		db.cachedPlayers[player.RowID] = *player
-		if player.RowID == 0 {
-			playerID, err := result.LastInsertId()
-			if err != nil {
-				return err
-			}
-			player.RowID = playerID
-		}
-	}
-
-	if player.GCID != "" {
-		_, err := db.insertPlayerGCID.Exec(player.GCID, player.RowID)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (db *osndb) AllMaps() ([]osn.LegacyMap, error) {
-	maps := make([]osn.LegacyMap, 0)
-
-	stmt, err := db.sqldb.Prepare(`SELECT
-	  map_id, map_name, player_count, map_filename, map_theme, width, height
-	  FROM maps
-		WHERE NOT deprecated;`)
-	if err != nil {
-		return maps, err
-	}
-	rows, err := stmt.Query()
-	if err != nil {
-		return maps, err
-	}
-	defer rows.Close()
-
-	mapobj := osn.LegacyMap{}
-	for rows.Next() {
-		// map_id, map_name, player_count, map_filename, map_theme, width, height
-		rows.Scan(
-			&mapobj.MapID, &mapobj.Name, &mapobj.PlayerCount,
-			&mapobj.Filename, &mapobj.Theme,
-			&mapobj.Width, &mapobj.Height)
-		maps = append(maps, mapobj)
-	}
-
-	return maps, nil
-}
-
-func (db *osndb) Map(id int8) (osn.Map, error) {
-	if len(db.cachedMaps) == 0 {
-		if err := db.cachemaps(); err != nil {
-			return osn.UnknownMap(), err
-		}
-	}
-
-	mapobj, found := db.cachedMaps[id]
-	if !found {
-		return osn.UnknownMap(), fmt.Errorf("unrecognized map ID %d", id)
-	}
-	return mapobj, nil
-}
-
-func (db *osndb) MapByName(name string) (osn.Map, error) {
-	if len(db.cachedMaps) == 0 {
-		if err := db.cachemaps(); err != nil {
-			return osn.UnknownMap(), err
-		}
-	}
-	for _, mapobj := range db.cachedMaps {
-		if mapobj.Name == name {
-			return mapobj, nil
-		}
-	}
-
-	return osn.UnknownMap(), fmt.Errorf("unknown map named %s", name)
-}
-
-func (db *osndb) cachemaps() error {
-	maps, err := db.AllMaps()
-	db.cachedMaps = make(map[int8]osn.Map)
-	if err != nil {
-		return err
-	}
-	for _, mapobj := range maps {
-		db.cachedMaps[mapobj.MapID] = mapobj
-	}
-	return nil
-}
-
-func (db *osndb) MatchByHash(hash string) (osn.LegacyMatch, error) {
-	match := osn.UNKNOWN_MATCH
-	row, err := db.selectMatchByHash.Query(hash)
-	if err != nil {
-		return match, err
-	}
-	defer row.Close()
-	if !row.Next() {
-		return match, fmt.Errorf("no match with hash %s", hash)
-	}
-
-	match = osn.LegacyMatch{}
-	err = row.Scan(
-		&match.MatchIndex,
-		&match.MatchHash,
-		&match.Competitive,
-		&match.Season,
-		&match.StartTime,
-		&match.MapID,
-		&match.TurnCount,
-		&match.Version,
-		&match.Status)
-	if err != nil {
-		return match, err
-	}
-	if match.Version != 1603 {
-		match.Status = int(osn.STATUS_LEGACY)
-		return match, fmt.Errorf("engine version %d is deprecated", match.Version)
-	}
-
-	row, err = db.selectRolesForMatch.Query(match.MatchIndex)
-	if err != nil {
-		return match, err
-	}
-	defer row.Close()
-	type role struct {
-		MatchID   int64
-		PlayerID  int64
-		TurnOrder int
-	}
-	log.Printf("match %d", match.MatchIndex)
-	roles := make([]role, 0)
-	for row.Next() {
-		var r role
-		row.Scan(&r.MatchID, &r.PlayerID, &r.TurnOrder)
-		roles = append(roles, r)
-	}
-	if len(roles) == 0 {
-		return osn.UNKNOWN_MATCH, fmt.Errorf("no roles found for match %s", hash)
-	} else if len(roles) <= 2 {
-		match.Players = make([]osn.Player, 2)
-		for _, role := range roles {
-			match.Players[role.TurnOrder-1].RowID = role.PlayerID
-		}
-	} else if len(roles) <= 4 {
-		match.Players = make([]osn.Player, 4)
-		for _, role := range roles {
-			match.Players[role.TurnOrder-1].RowID = role.PlayerID
-		}
-	} else {
-		return osn.UNKNOWN_MATCH, fmt.Errorf("too many roles for match %s", hash)
-	}
-
-	return match, nil
-}
-
-func (db *osndb) InsertMatch(match *osn.LegacyMatch) error {
-	tx, err := db.sqldb.Begin()
-	if err != nil {
-		return err
-	}
-
-	result, err := db.insertMatch.Exec(
-		match.MatchHash, match.Competitive, match.Season, match.StartTime,
-		match.MapID, match.TurnCount, match.Version, match.Status)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-	match.MatchIndex = id
-
-	log.Printf("%d players", len(match.Players))
-	for order, role := range match.Players {
-		if _, err := db.insertPlayerRole.Exec(
-			id, role.RowID, order+1); err != nil {
-			tx.Rollback()
-			return err
-		}
-	}
-
-	tx.Commit()
-	return nil
-}
-
-func (db *osndb) InsertStanding(standing osn.PlayerStanding, previous int, current int) error {
-	if _, err := db.insertStanding.Exec(
-		current, standing.League(), standing.Rank(),
-		standing.PointsAfter(), standing.Delta()); err != nil {
-		return err
-	}
-	if _, err := db.updatePrevStanding.Exec(current, previous); err != nil {
-		return err
-	}
-
-	return nil
-}
+func (db *osndb) Players() Table[*PlayerRecord]      { return db.players }
+func (db *osndb) Matches() Table[*LegacyMatchRecord] { return db.matches }
+func (db *osndb) Standings() Table[*StandingsRecord] { return db.standings }

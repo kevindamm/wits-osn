@@ -25,6 +25,7 @@ package db
 import (
 	"database/sql"
 	"database/sql/driver"
+	"fmt"
 
 	osn "github.com/kevindamm/wits-osn"
 )
@@ -41,69 +42,71 @@ func (player PlayerRecord) Columns() []string {
 	}
 }
 
-func (player PlayerRecord) ScanRow(row *sql.Row) error {
-	// TODO
-	return nil
-}
+func (player *PlayerRecord) Values() ([]driver.Value, error) {
 
-func (player *PlayerRecord) ToValues() ([]driver.Value, error) {
 	// TODO
 	return []driver.Value{}, nil
 }
 
-type tablePlayers struct {
-	table[*PlayerRecord]
-	cached map[int64]StandingsRecord
+func (player *PlayerRecord) NamedValues() ([]driver.NamedValue, error) {
+
+	// TODO
+	return nil, nil
 }
 
-func (tablePlayers) SqlCreate() string {
-	return `CREATE TABLE "players" (
+func (player *PlayerRecord) ScanValues(values ...driver.Value) error {
+
+	// TODO
+	return nil
+}
+
+func (player *PlayerRecord) ScanRow(row *sql.Row) error {
+	// TODO
+	return nil
+}
+
+type tablePlayers struct {
+	tableBase[*PlayerRecord]
+	cachedPlayers map[int64]*PlayerRecord
+}
+
+func MakePlayersTable(sqldb *sql.DB) Table[*PlayerRecord] {
+	return tablePlayers{
+		tableBase: tableBase[*PlayerRecord]{
+			sqldb:   sqldb,
+			name:    "players",
+			Primary: "id",
+			NameCol: "name",
+		},
+		cachedPlayers: make(map[int64]*PlayerRecord)}
+}
+
+func (table tablePlayers) SqlCreate() string {
+	return fmt.Sprintf(`CREATE TABLE "%s" (
     "id"    INTEGER PRIMARY KEY,
     "gcid"  TEXT UNIQUE,
     "name"  TEXT NOT NULL
-  ) WITHOUT ROWID;`
+  ) WITHOUT ROWID;`, table.name)
 }
 
-func (tablePlayers) SqlInit() string {
-	return `
-  INSERT INTO players (id, gcid, name) VALUES (0, NULL, "UNKNOWN");
+func (table tablePlayers) SqlInit() string {
+	return fmt.Sprintf(`
+  INSERT INTO %s (id, gcid, name) VALUES (0, NULL, "UNKNOWN");
 	
-  CREATE UNIQUE INDEX player_names ON players (name);`
+  CREATE UNIQUE INDEX player_names ON %s (name);`,
+		table.name, table.name)
 }
 
-//	osndb.insertPlayer, err = db.Prepare(`INSERT INTO
-//	  players (id, name)
-//		VALUES (?, ?)`)
-//	if err != nil {
-//		return err
-//	}
-//
-//	osndb.insertPlayerGCID, err = db.Prepare(`UPDATE players
-//		SET gcid = ?
-//		WHERE id = ?;`)
-//	if err != nil {
-//		return err
-//	}
-
-//	osndb.selectPlayerByID, err = db.Prepare(`SELECT *
-//	  FROM players
-//	  WHERE id = ?;`)
-//	if err != nil {
-//		return err
-//	}
-//
-//	osndb.selectPlayerByName, err = db.Prepare(`SELECT *
-//	  FROM players
-//	  WHERE name = ?;`)
-//	if err != nil {
-//		return err
-//	}
-
-type StandingsRecord osn.PlayerStanding
+type StandingsRecord struct {
+	After int64
+	Until int64
+	osn.PlayerStanding
+}
 
 func (*StandingsRecord) Columns() []string {
 	return []string{
-		"after", "until",
+		"after_role",
+		"until_role",
 		"player_league",
 		"player_rank",
 		"player_points",
@@ -111,26 +114,81 @@ func (*StandingsRecord) Columns() []string {
 	}
 }
 
+func (record *StandingsRecord) Values() ([]driver.Value, error) {
+	// TODO
+	return []driver.Value{
+		record.After,
+		record.Until,
+		record.League(),
+		record.Rank(),
+		record.PointsAfter(),
+		record.Delta(),
+	}, nil
+}
+
+func (record *StandingsRecord) NamedValues() ([]driver.NamedValue, error) {
+	return []driver.NamedValue{
+		{
+			Name:    "after_role",
+			Ordinal: 1,
+			Value:   record.After,
+		},
+		{
+			Name:    "until_role",
+			Ordinal: 2,
+			Value:   record.Until,
+		},
+		{
+			Name:    "player_league",
+			Ordinal: 3,
+			Value:   record.League(),
+		},
+		{
+			Name:    "player_rank",
+			Ordinal: 4,
+			Value:   record.Rank(),
+		},
+		{
+			Name:    "player_points",
+			Ordinal: 5,
+			Value:   record.PointsAfter(),
+		},
+		{
+			Name:    "player_delta",
+			Ordinal: 6,
+			Value:   record.Delta(),
+		},
+	}, nil
+}
+
+func (record *StandingsRecord) ScanValues(...driver.Value) error {
+	// TODO
+	return nil
+}
+
 func (record *StandingsRecord) ScanRow(row *sql.Row) error {
 	// TODO
 	return nil
 }
 
-func (record *StandingsRecord) ToValues() ([]driver.Value, error) {
-	// TODO
-	return []driver.Value{}, nil
+type tableStandings struct {
+	tableBase[*StandingsRecord]
+	cached map[int64]*StandingsRecord
 }
 
-type tableStandings struct {
-	table[*StandingsRecord]
-	cached map[int64]StandingsRecord
+func MakeStandingsTable(sqldb *sql.DB) Table[*StandingsRecord] {
+	return tableStandings{
+		tableBase[*StandingsRecord]{
+			sqldb: sqldb,
+			name:  "standings"},
+		make(map[int64]*StandingsRecord)}
 }
 
 func (tableStandings) SqlCreate() string {
 	return `CREATE TABLE "standings" (
     -- rowid INTEGER PRIMARY KEY,
-    "after" INTEGER NOT NULL UNIQUE,
-    "until" INTEGER,
+    "after_role" INTEGER NOT NULL UNIQUE,
+    "until_role" INTEGER,
 
     "player_league" INTEGER NOT NULL,
     "player_rank"   INTEGER NOT NULL,
@@ -152,18 +210,3 @@ func (tableStandings) SqlCreate() string {
 func (tableStandings) SqlInit() string {
 	return ""
 }
-
-//	osndb.insertStanding, err = db.Prepare(`INSERT INTO
-//	  standings (after, player_league, player_rank, player_points, player_delta)
-//		VALUES (?, ?, ?, ?, ?)
-//	`)
-//	if err != nil {
-//		return err
-//	}
-
-//	osndb.updatePrevStanding, err = db.Prepare(`UPDATE standings
-//		SET until = ?
-//		WHERE after = ?;`)
-//	if err != nil {
-//		return err
-//	}

@@ -34,11 +34,16 @@ import (
 // Abstraction over the structural type of values in a table or group of tables.
 type Record interface {
 	Columns() []string
+	Values() ([]driver.Value, error)
+	NamedValues() ([]driver.NamedValue, error)
 
+	ScanValues(...driver.Value) error
 	ScanRow(*sql.Row) error
-	ToValues() ([]driver.Value, error)
 }
 
+// The SQL-specific features of a relational table.  Fortunately, these have
+// domains and codomains that aren't parameterized by the table's [Record] type,
+// even though the computation of CREATE, INDEX and INSERT commands
 type TableSql interface {
 	Name() string
 	SqlCreate() string
@@ -53,7 +58,7 @@ type Table[T Record] interface {
 	Insert(*T) error
 	Get(uint64) (T, error)
 	GetByName(string) (T, error)
-	SelectAll() *sql.Rows
+	SelectAll() (<-chan T, error)
 }
 
 // Only needs to be called once at database setup.  Also closes the database.
@@ -63,12 +68,14 @@ func CreateTablesAndClose(db_path string) error {
 	if err != nil {
 		return errors.New("could not open WitsDB database")
 	}
+	// By closing the connection we also auto-close any transactions,
+	// as a defense against any
 	defer witsdb.Close()
 
 	for _, table := range []TableSql{
-		witsdb.status.table,
-		witsdb.leagues.table,
-		witsdb.races.table,
+		witsdb.status,
+		witsdb.leagues,
+		witsdb.races,
 		witsdb.maps,
 		witsdb.players,
 		witsdb.matches,
@@ -93,22 +100,32 @@ func CreateTablesAndClose(db_path string) error {
 
 // Abstraction over one or more relational tables,
 // represents an atomic structural type.
-type table[T Record] struct {
+type tableBase[T Record] struct {
 	sqldb *sql.DB
-	name  string
-	zero  T
 
-	// Simplification for now, as these tables don't have complicated queries.
+	// This table's name.
+	name string
+
+	// A zero instance of T, used for type reflection and instantiation.
+	// It is assumed that nothing in this package exposes a pointer to it,
+	// and it is semantically treated as immutable.
+	zero T
+
+	// It is a simplification for now, as these tables don't have complex queries.
 	// There are a couple of places with joins but ScanRow() is still simple-ish.
 	// Mainly the foreign key constraints and indices are a sanity check on data.
+
+	// The primary key.  Defaults to `rowid` (Sqlite).
 	Primary string
+
+	// The column any "by name" lookups use.  Defaults to `name`
 	NameCol string
 }
 
-func (table table[T]) Name() string { return table.name }
-func (table table[T]) Zero() T      { return table.zero }
+func (table tableBase[T]) Name() string { return table.name }
+func (table tableBase[T]) Zero() T      { return table.zero }
 
-func (table table[T]) Get(id uint64) (T, error) {
+func (table tableBase[T]) Get(id uint64) (T, error) {
 	var (
 		record T
 		err    error
@@ -124,15 +141,12 @@ func (table table[T]) Get(id uint64) (T, error) {
 		colstring, table.name, rowid)
 
 	row := table.sqldb.QueryRow(sql, id)
-	if err != nil {
-		return record, err
-	}
 	err = record.ScanRow(row)
 	return record, err
 }
 
-// Retrieves the single row
-func (table table[T]) GetByName(name string) (T, error) {
+// Retrieves the single row that corresponds to the indicated name.
+func (table tableBase[T]) GetByName(name string) (T, error) {
 	var (
 		record T
 		err    error
@@ -148,9 +162,6 @@ func (table table[T]) GetByName(name string) (T, error) {
 		colstring, table.name, namecol)
 
 	row := table.sqldb.QueryRow(sql, name)
-	if err != nil {
-		return record, err
-	}
 	err = record.ScanRow(row)
 	return record, err
 }
@@ -158,33 +169,16 @@ func (table table[T]) GetByName(name string) (T, error) {
 // If the record's ID is 0 it will be updated with the index it was assigned.
 // When a non-zero value is used as the record's primary key, if that record
 // already existed it returns an error.
-func (table table[T]) Insert(record *T) error {
+func (table tableBase[T]) Insert(record *T) error {
+
 	// TODO
 	return nil
 }
 
-// Returns the results of a `SELECT * FROM ?table.Name;` on the receiver ?table.
-//
-// If there is an error executing the "SELECT *" query (e.g., the table was
-// dropped or not yet created) it will be surfaced in *sql.Rows which will
-// always be non-nil (as per [database/sql.)
-func (table table[T]) SelectAll() *sql.Rows {
+func (table tableBase[T]) SelectAll() (<-chan T, error) {
+
 	// TODO
-	return nil
-}
-
-func (table table[T]) SqlCreate() string {
-	// TODO derive this from Columns and Zero.NamedValues
-	return fmt.Sprintf(`CREATE TABLE "%s" (
-	  "%s" INTEGER PRIMARY KEY,
-		"%s" TEXT NOT NULL
-	) WITHOUT ROWID;`,
-		table.Name, table.Primary, table.NameCol)
-}
-
-func (table table[T]) SqlInit() string {
-	// TODO replace this method with explicit initialization in [OpenOsnDB] ctor.
-	return ""
+	return nil, nil
 }
 
 // Execute the SQL statement on the provided database.

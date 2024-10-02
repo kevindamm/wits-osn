@@ -25,29 +25,42 @@ package db
 import (
 	"database/sql"
 	"database/sql/driver"
+	"fmt"
 
 	osn "github.com/kevindamm/wits-osn"
 )
 
 type LegacyMatchRecord osn.LegacyMatch
 
-func (LegacyMatchRecord) Columns() []string {
+func (*LegacyMatchRecord) Columns() []string {
 	return []string{
 		"match_hash", "competitive", "season", "start_time",
 		"map_id", "turn_count", "version", "status",
 	}
 }
 
-func (record LegacyMatchRecord) ScanRow(*sql.Row) error {
+func (record *LegacyMatchRecord) Values() ([]driver.Value, error) {
+
+	// TODO
+	return []driver.Value{}, nil
+}
+
+func (record *LegacyMatchRecord) NamedValues() ([]driver.NamedValue, error) {
+
+	// TODO
+	return []driver.NamedValue{}, nil
+}
+
+func (record *LegacyMatchRecord) ScanValues(...driver.Value) error {
 
 	// TODO
 	return nil
 }
 
-func (record LegacyMatchRecord) ToValues() ([]driver.Value, error) {
+func (record *LegacyMatchRecord) ScanRow(*sql.Row) error {
 
 	// TODO
-	return []driver.Value{}, nil
+	return nil
 }
 
 // The `matches` metadata relates to an instance of a game between two
@@ -55,12 +68,21 @@ func (record LegacyMatchRecord) ToValues() ([]driver.Value, error) {
 // each game's turns, or `roles` which uniquely indexes the players to
 // their involvement in the match.
 type tableMatches struct {
-	table[LegacyMatchRecord]
+	tableBase[*LegacyMatchRecord]
 	cached map[osn.GameID]osn.LegacyMatch
 }
 
-func (tableMatches) SqlCreate() string {
-	return `CREATE TABLE "matches" (
+func MakeMatchesTable(sqldb *sql.DB) Table[*LegacyMatchRecord] {
+	return tableMatches{
+		tableBase[*LegacyMatchRecord]{
+			sqldb:   sqldb,
+			name:    "matches",
+			NameCol: "match_hash"},
+		make(map[osn.GameID]osn.LegacyMatch)}
+}
+
+func (table tableMatches) SqlCreate() string {
+	return fmt.Sprintf(`CREATE TABLE "%s" (
     -- rowid INTEGER PRIMARY KEY AUTOINCREMENT, -- legacy "id" or Index
     "match_hash"   TEXT NOT NULL UNIQUE,
     "competitive"  BOOLEAN,    -- league or friendly
@@ -79,33 +101,37 @@ func (tableMatches) SqlCreate() string {
     FOREIGN KEY (status)
       REFERENCES fetch_status (id)
       ON DELETE CASCADE ON UPDATE NO ACTION
-  );`
+  );`, table.name)
 }
 
 func (tableMatches) SqlInit() string {
 	return `CREATE UNIQUE INDEX match_hashes ON matches (match_hash);`
 }
 
-//	osndb.insertMatch, err = db.Prepare(`INSERT INTO
-//		matches (match_hash, competitive, season, start_time,
-//		  map_id, turn_count, version, status)
-//		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-//	if err != nil {
-//		return err
-//	}
-
-//	osndb.selectMatchByHash, err = db.Prepare(`SELECT
-//		rowid, *
-//		FROM matches
-//		WHERE match_hash = ?;`)
-//	if err != nil {
-//		return err
-//	}
-
+// Relation for which players are participating in which matches, and the turn
+// order they are assigned to.  Appropriate for both 1v1 and 2v2 matches.
 type PlayerRoleRecord osn.PlayerRole
 
 func (PlayerRoleRecord) Columns() []string {
 	return []string{"match_id", "player_id", "turn_order"}
+}
+
+func (record PlayerRoleRecord) Values() ([]driver.Value, error) {
+
+	// TODO
+	return []driver.Value{}, nil
+}
+
+func (record PlayerRoleRecord) NamedValues() ([]driver.NamedValue, error) {
+
+	// TODO
+	return nil, nil
+}
+
+func (record PlayerRoleRecord) ScanValues(...driver.Value) error {
+
+	// TODO
+	return nil
 }
 
 func (record PlayerRoleRecord) ScanRow(*sql.Row) error {
@@ -114,21 +140,19 @@ func (record PlayerRoleRecord) ScanRow(*sql.Row) error {
 	return nil
 }
 
-func (record PlayerRoleRecord) ToValues() ([]driver.Value, error) {
-
-	// TODO
-	return []driver.Value{}, nil
-}
-
 type tableRoles struct {
-	table[*PlayerRoleRecord]
+	tableBase[*PlayerRoleRecord]
 }
 
-var PlayerRoleSchema = []string{
-	// Relation for which players are participating in which matches,
-	// and the turn order they are assigned to.
-	// Appropriate for both 1v1 and 2v2 matches.
-	`CREATE TABLE "roles" (
+func MakeRolesTable(sqldb *sql.DB) Table[*PlayerRoleRecord] {
+	return tableRoles{
+		tableBase[*PlayerRoleRecord]{
+			sqldb: sqldb,
+			name:  "roles"}}
+}
+
+func (table tableRoles) SqlCreate() string {
+	return fmt.Sprintf(`CREATE TABLE "%s" (
       -- rowid INTEGER PRIMARY KEY,
       "match_id" INTEGER NOT NULL,
       "player_id" INTEGER NOT NULL,
@@ -145,20 +169,9 @@ var PlayerRoleSchema = []string{
 
       UNIQUE (match_id, turn_order) ON CONFLICT FAIL,
       UNIQUE (match_id, player_id) ON CONFLICT IGNORE
-    );`,
+    );`, table.name)
 }
 
-//	osndb.insertPlayerRole, err = db.Prepare(`INSERT INTO
-//	  roles (match_id, player_id, turn_order)
-//		VALUES (?, ?, ?);`)
-//	if err != nil {
-//		return err
-//	}
-
-//	osndb.selectRolesForMatch, err = db.Prepare(`SELECT
-//	  rowid, player_id, turn_order
-//	  FROM roles
-//		WHERE match_id = ?;`)
-//	if err != nil {
-//		return err
-//	}
+func (table tableRoles) SqlInit() string {
+	return ""
+}

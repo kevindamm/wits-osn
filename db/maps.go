@@ -32,19 +32,13 @@ import (
 	osn "github.com/kevindamm/wits-osn"
 )
 
-type LegacyMap osn.LegacyMap
+type LegacyMapRecord osn.LegacyMap
 
-func (LegacyMap) Columns() []string {
+func (LegacyMapRecord) Columns() []string {
 	return []string{"map_id", "map_name", "player_count", "details"}
 }
 
-func (record LegacyMap) ScanRow(row *sql.Row) error {
-	bytes := make([]byte, 0)
-	row.Scan(&record.MapID, &record.Name, &record.PlayerCount, &bytes)
-	return json.Unmarshal(bytes, &record.LegacyMapDetails)
-}
-
-func (record LegacyMap) ToValues() ([]driver.Value, error) {
+func (record LegacyMapRecord) Values() ([]driver.Value, error) {
 	return []driver.Value{
 		record.MapID,
 		record.Name,
@@ -53,18 +47,52 @@ func (record LegacyMap) ToValues() ([]driver.Value, error) {
 	}, nil
 }
 
-type tableMaps struct {
-	table[LegacyMap]
-	cached map[string]LegacyMap
+func (record LegacyMapRecord) NamedValues() ([]driver.NamedValue, error) {
+	return []driver.NamedValue{
+		{
+			Name:    "map_id",
+			Ordinal: 0,
+			Value:   record.MapID},
+		{
+			Name:    "map_name",
+			Ordinal: 1,
+			Value:   record.Name},
+		{
+			Name:    "player_count",
+			Ordinal: 2,
+			Value:   record.PlayerCount},
+		{
+			Name:    "details",
+			Ordinal: 3,
+			Value:   record.LegacyMapDetails},
+	}, nil
 }
 
-func MakeMapsTable(sqldb *sql.DB) Table[LegacyMap] {
+func (record LegacyMapRecord) ScanValues(values ...driver.Value) error {
+
+	// TODO
+	return nil
+}
+
+func (record LegacyMapRecord) ScanRow(row *sql.Row) error {
+	bytes := make([]byte, 0)
+	row.Scan(&record.MapID, &record.Name, &record.PlayerCount, &bytes)
+	return json.Unmarshal(bytes, &record.LegacyMapDetails)
+}
+
+type tableMaps struct {
+	tableBase[LegacyMapRecord]
+	cachedMaps map[string]osn.LegacyMap
+}
+
+func MakeMapsTable(sqldb *sql.DB) Table[LegacyMapRecord] {
 	return tableMaps{
-		table: table[LegacyMap]{
+		tableBase: tableBase[LegacyMapRecord]{
 			sqldb:   sqldb,
 			name:    "maps",
 			Primary: "map_id",
-			NameCol: "map_name"}}
+			NameCol: "map_name"},
+		cachedMaps: make(map[string]osn.LegacyMap)}
 }
 
 func (table tableMaps) SqlCreate() string {
@@ -75,45 +103,36 @@ func (table tableMaps) SqlCreate() string {
 			  CHECK(player_count == 2 OR player_count == 4 OR player_count == 0),
 
 			-- Represents the following details in JSON-encoded bytes.
-			"json"             BLOB
-      -- "map_filename"  TEXT NOT NULL,
-	    -- "theme"         INTEGER,
-	    -- "terrain"       BLOB,  -- array of (coordinates and floor/wall)
-	    -- "units"         BLOB,  -- array of (coordinates and unit type)
-      -- "width"         INTEGER,
-      -- "height"        INTEGER,
-
-      FOREIGN KEY (map_theme) REFERENCES races (race_id)
-        ON DELETE CASCADE ON UPDATE NO ACTION
-    ) WITHOUT ROWID;`, table.Name)
+			"details"           BLOB -- see LegacyMapDetails
+    ) WITHOUT ROWID;`, table.name)
 }
 
 func (table tableMaps) SqlInit() string {
 	return strings.Join([]string{
 		fmt.Sprintf(`INSERT INTO %s VALUES
-	    (0, "MAP_UNKNOWN", NULL, "", 0, NULL, 0, 0, true);`, table.Name),
+	    (0, "MAP_UNKNOWN", NULL, "", 0, NULL, 0, 0, true);`, table.name),
 
 		fmt.Sprintf(`INSERT INTO %s
-      (map_id, map_name, player_count, map_filename, map_theme, width, height)
+      (map_id, map_name, player_count, filename)
     VALUES
-      (1,      "Machination",       4, "machination",        1,    13,    13),
-      (2,      "Foundry (v1)",      0, "foundry",            1,    13,    12),
-      (3,      "Foundry",           2, "foundry",            1,    13,    12),
-      (4,      "Glitch",            2, "glitch",             1,    11,    11),
-      (5,      "Candy Core Mine",   4, "candy-core-mine",    2,    13,    13),
-      (6,      "Sweetie Plains",    2, "sweetie-plains",     2,    13,    13),
-      (7,      "Peek-a-boo",        2, "peekaboo",           2,    13,    10),
-      (8,      "Blitz Beach",       4, "blitz-beach",        3,    13,    11),
-      (9,      "Long Nine",         2, "long-nine",          3,    13,    14),
-      (10,     "Sharkfood Island",  2, "sharkfood-island",   3,    13,    10),
-      (11,     "Acrospire",         4, "acrospire",          4,    13,    13),
-      (12,     "Thorn Gulley",      2, "thorn-gulley",       4,    13,    12),
-      (13,     "Reaper",            2, "reaper",             4,    13,    12),
-      (14,     "Skull Duggery",     2, "skull-duggery",      3,    13,    10),
-      (15,     "War Garden",        2, "war-garden",         4,    13,    12),
-      (16,     "Sweet Tooth",       2, "sweet-tooth",        2,    13,    10),
-      (17,     "Sugar Rock",        4, "sugar-rock",         2,    13,    13),
-      (18,     "Mechanism",         4, "mechanism",          1,    13,    13)`,
-			table.Name),
+      (1,      "Machination",       4, "machination"),
+      (2,      "Foundry (v1)",      0, "foundry"),
+      (3,      "Foundry",           2, "foundry"),
+      (4,      "Glitch",            2, "glitch"),
+      (5,      "Candy Core Mine",   4, "candy-core-mine"),
+      (6,      "Sweetie Plains",    2, "sweetie-plains"),
+      (7,      "Peek-a-boo",        2, "peekaboo"),
+      (8,      "Blitz Beach",       4, "blitz-beach"),
+      (9,      "Long Nine",         2, "long-nine"),
+      (10,     "Sharkfood Island",  2, "sharkfood-island"),
+      (11,     "Acrospire",         4, "acrospire"),
+      (12,     "Thorn Gulley",      2, "thorn-gulley"),
+      (13,     "Reaper",            2, "reaper"),
+      (14,     "Skull Duggery",     2, "skull-duggery"),
+      (15,     "War Garden",        2, "war-garden"),
+      (16,     "Sweet Tooth",       2, "sweet-tooth"),
+      (17,     "Sugar Rock",        4, "sugar-rock"),
+      (18,     "Mechanism",         4, "mechanism");`,
+			table.name),
 	}, ";\n")
 }
