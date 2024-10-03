@@ -75,15 +75,16 @@ func TestDBEnumTable(t *testing.T) {
 	tablename := "myenum"
 	enumtable := db.MakeEnumTable(tablename, osn.EnumValuesFor(EnumRange))
 	create := enumtable.SqlCreate()
-	if create != `CREATE TABLE "myenum" (
-    "id"    INTEGER PRIMARY KEY,
-    "name"  TEXT NOT NULL
-  ) WITHOUT ROWID;` {
-		t.Errorf("SQL CREATE TABLE malformed; got\n%s", create)
+	expected := `CREATE TABLE "myenum" (
+     "id"    INTEGER PRIMARY KEY,
+     "name"  TEXT NOT NULL
+   ) WITHOUT ROWID;`
+	if create != expected {
+		t.Errorf("SQL CREATE TABLE malformed; got\n%s\nexpected\n%s\n", create, expected)
 	}
 
 	init := enumtable.SqlInit()
-	expected := fmt.Sprintf(`INSERT INTO myenum VALUES (0, "%s"), (1, "%s"), (2, "%s"), (3, "%s");`,
+	expected = fmt.Sprintf(`INSERT INTO myenum VALUES (0, "%s"), (1, "%s"), (2, "%s"), (3, "%s");`,
 		enum_names[0], enum_names[1], enum_names[2], enum_names[3])
 	if init != expected {
 		t.Errorf("SQL INSERT VALUES malformed; got\n%s\nwant\n%s", init, expected)

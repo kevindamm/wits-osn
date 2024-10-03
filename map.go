@@ -29,7 +29,7 @@ import (
 )
 
 type LegacyMap struct {
-	MapID int8   `json:"map_id"`
+	MapID uint8  `json:"map_id"`
 	Name  string `json:"name"`
 
 	// The number of players this map can accommodate.

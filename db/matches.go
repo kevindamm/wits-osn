@@ -30,7 +30,15 @@ import (
 	osn "github.com/kevindamm/wits-osn"
 )
 
-type LegacyMatchRecord osn.LegacyMatch
+type LegacyMatchRecord struct {
+	// Embedded so that type inference on Table[LegacyMatchRecord] works.
+	// TODO consider generalizing on a ProtoRecord*, avoiding awkward requirement.
+	osn.LegacyMatch
+}
+
+func NewMatchRecord(match osn.LegacyMatch) *LegacyMatchRecord {
+	return &LegacyMatchRecord{match}
+}
 
 func (*LegacyMatchRecord) Columns() []string {
 	return []string{
@@ -68,16 +76,16 @@ func (record *LegacyMatchRecord) ScanRow(*sql.Row) error {
 // each game's turns, or `roles` which uniquely indexes the players to
 // their involvement in the match.
 type tableMatches struct {
-	tableBase[*LegacyMatchRecord]
+	mutableBase[*LegacyMatchRecord]
 	cached map[osn.GameID]osn.LegacyMatch
 }
 
-func MakeMatchesTable(sqldb *sql.DB) Table[*LegacyMatchRecord] {
+func MakeMatchesTable(sqldb *sql.DB) MutableTable[*LegacyMatchRecord] {
 	return tableMatches{
-		tableBase[*LegacyMatchRecord]{
+		mutableBase[*LegacyMatchRecord]{tableBase[*LegacyMatchRecord]{
 			sqldb:   sqldb,
 			name:    "matches",
-			NameCol: "match_hash"},
+			NameCol: "match_hash"}},
 		make(map[osn.GameID]osn.LegacyMatch)}
 }
 
@@ -141,14 +149,14 @@ func (record PlayerRoleRecord) ScanRow(*sql.Row) error {
 }
 
 type tableRoles struct {
-	tableBase[*PlayerRoleRecord]
+	mutableBase[*PlayerRoleRecord]
 }
 
-func MakeRolesTable(sqldb *sql.DB) Table[*PlayerRoleRecord] {
+func MakeRolesTable(sqldb *sql.DB) MutableTable[*PlayerRoleRecord] {
 	return tableRoles{
-		tableBase[*PlayerRoleRecord]{
+		mutableBase[*PlayerRoleRecord]{tableBase[*PlayerRoleRecord]{
 			sqldb: sqldb,
-			name:  "roles"}}
+			name:  "roles"}}}
 }
 
 func (table tableRoles) SqlCreate() string {

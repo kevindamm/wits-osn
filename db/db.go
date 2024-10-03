@@ -38,9 +38,9 @@ type OsnDB interface {
 
 	Map(name string) (osn.LegacyMap, error)
 
-	Players() Table[*PlayerRecord]
-	Matches() Table[*LegacyMatchRecord]
-	Standings() Table[*StandingsRecord]
+	Players() MutableTable[*PlayerRecord]
+	Matches() MutableTable[*LegacyMatchRecord]
+	Standings() MutableTable[*StandingsRecord]
 }
 
 // Opens a Sqlite db at indicated path and prepares queries.
@@ -59,18 +59,16 @@ func OpenOsnDB(filepath string) OsnDB {
 type osndb struct {
 	sqldb *sql.DB
 
-	// read-only tables
 	status  EnumTable[osn.FetchStatus]
 	leagues EnumTable[osn.LeagueEnum]
 	races   EnumTable[osn.UnitRaceEnum]
 
 	maps Table[LegacyMapRecord]
 
-	// writable tables
-	players   Table[*PlayerRecord]
-	matches   Table[*LegacyMatchRecord]
-	roles     Table[*PlayerRoleRecord]
-	standings Table[*StandingsRecord]
+	players   MutableTable[*PlayerRecord]
+	matches   MutableTable[*LegacyMatchRecord]
+	roles     MutableTable[*PlayerRoleRecord]
+	standings MutableTable[*StandingsRecord]
 }
 
 // Opens a connection to the database but does not prepare any queries.
@@ -116,6 +114,6 @@ func (db *osndb) Map(name string) (osn.LegacyMap, error) {
 	return osn.UnknownMap(), nil
 }
 
-func (db *osndb) Players() Table[*PlayerRecord]      { return db.players }
-func (db *osndb) Matches() Table[*LegacyMatchRecord] { return db.matches }
-func (db *osndb) Standings() Table[*StandingsRecord] { return db.standings }
+func (db *osndb) Players() MutableTable[*PlayerRecord]      { return db.players }
+func (db *osndb) Matches() MutableTable[*LegacyMatchRecord] { return db.matches }
+func (db *osndb) Standings() MutableTable[*StandingsRecord] { return db.standings }

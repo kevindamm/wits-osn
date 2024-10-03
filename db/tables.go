@@ -36,7 +36,6 @@ type Record interface {
 	Columns() []string
 	Values() ([]driver.Value, error)
 	NamedValues() ([]driver.NamedValue, error)
-
 	ScanValues(...driver.Value) error
 	ScanRow(*sql.Row) error
 }
@@ -50,15 +49,21 @@ type TableSql interface {
 	SqlInit() string
 }
 
-// Common interface for one or more database tables
+// Common interface for one or more database tables and retrieval of records.
 type Table[T Record] interface {
 	TableSql
 	Zero() T
 
-	Insert(*T) error
-	Get(uint64) (T, error)
+	Get(int64) (T, error)
 	GetByName(string) (T, error)
 	SelectAll() (<-chan T, error)
+}
+
+// Variant on the table type which allows for inserting and deleting records.
+type MutableTable[T Record] interface {
+	Table[T]
+	Insert(T) error
+	Delete(int64) error
 }
 
 // Only needs to be called once at database setup.  Also closes the database.
@@ -125,7 +130,7 @@ type tableBase[T Record] struct {
 func (table tableBase[T]) Name() string { return table.name }
 func (table tableBase[T]) Zero() T      { return table.zero }
 
-func (table tableBase[T]) Get(id uint64) (T, error) {
+func (table tableBase[T]) Get(id int64) (T, error) {
 	var (
 		record T
 		err    error
@@ -166,19 +171,29 @@ func (table tableBase[T]) GetByName(name string) (T, error) {
 	return record, err
 }
 
+func (table tableBase[T]) SelectAll() (<-chan T, error) {
+
+	// TODO
+	return nil, nil
+}
+
+type mutableBase[T Record] struct {
+	tableBase[T]
+}
+
 // If the record's ID is 0 it will be updated with the index it was assigned.
 // When a non-zero value is used as the record's primary key, if that record
 // already existed it returns an error.
-func (table tableBase[T]) Insert(record *T) error {
+func (table mutableBase[T]) Insert(record T) error {
 
 	// TODO
 	return nil
 }
 
-func (table tableBase[T]) SelectAll() (<-chan T, error) {
+func (table mutableBase[T]) Delete(id int64) error {
 
 	// TODO
-	return nil, nil
+	return nil
 }
 
 // Execute the SQL statement on the provided database.

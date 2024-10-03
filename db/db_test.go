@@ -46,9 +46,9 @@ func TestDB(t *testing.T) {
 	}
 
 	// Closing and re-opening the database should still include the tables above.
-	db := db.OpenOsnDB(file.Name())
+	osndb := db.OpenOsnDB(file.Name())
 
-	mapobj, err := db.Map(1)
+	mapobj, err := osndb.Map("machination")
 	if err != nil {
 		t.Errorf("could not find map ID 1: %s", err)
 	}
@@ -56,33 +56,27 @@ func TestDB(t *testing.T) {
 		t.Error("retrieved incorrect map for ID 1")
 	}
 
-	mapobj, err = db.Map(2)
-	if err == nil || mapobj.MapID != 0 {
-		t.Error("deprecated map should not be included")
-	}
-
-	maps, err := db.AllMaps()
+	mapobj, err = osndb.Map("foundry")
 	if err != nil {
-		t.Errorf("MapNames() error: %s\n", err)
-	} else {
-		if len(maps) != 17 {
-			t.Errorf("retrieved unexpected number of maps %d\n%v", len(maps), maps)
-		}
+		t.Errorf("could not find map ID 3 (foundry): %s", err)
+	}
+	if mapobj.MapID != 3 || mapobj.Name != "Foundry" {
+		t.Error("retrieved incorrect map for ID 3")
 	}
 
-	err = db.InsertPlayer(&osn.Player{
-		RowID: 1, GCID: "abcde", Name: "First"})
+	err = osndb.Players().Insert(&db.PlayerRecord{osn.Player{
+		RowID: 1, GCID: "abcde", Name: "First"}})
 	if err != nil {
 		t.Error(err)
 	}
-	err = db.InsertPlayer(&osn.Player{
-		RowID: 2, GCID: "bcdef", Name: "2nd"})
+	err = osndb.Players().Insert(&db.PlayerRecord{osn.Player{
+		RowID: 2, GCID: "bcdef", Name: "2nd"}})
 	if err != nil {
 		t.Error(err)
 	}
 
-	check_player(t, db, 1, "First")
-	check_player(t, db, 2, "2nd")
+	check_player(t, osndb, 1, "First")
+	check_player(t, osndb, 2, "2nd")
 
 	metadata := osn.LegacyReplayMetadata{
 		GameID:      "ag5vdXR3aXR0ZXJzZ2FtZXIQCxIIR2FtZVJvb20Y9-5HDA",
@@ -118,17 +112,17 @@ func TestDB(t *testing.T) {
 	}
 
 	match := metadata.ToLegacyMatch()
-	err = db.InsertMatch(&match)
+	err = osndb.Matches().Insert(db.NewMatchRecord(match))
 	if err != nil {
 		t.Errorf("error when inserting match metadata:\n%s", err)
 	}
 
 	log.Print(metadata, " => ", match)
-	check_match(t, db, match)
+	check_match(t, osndb, match)
 }
 
 func check_player(t *testing.T, db db.OsnDB, id int64, name string) {
-	player, err := db.Player(id)
+	player, err := db.Players().Get(id)
 	if err != nil {
 		t.Errorf("error retrieving player (id=%d)\n%s", id, err)
 	}
@@ -136,7 +130,7 @@ func check_player(t *testing.T, db db.OsnDB, id int64, name string) {
 		t.Errorf("incorrect name for player (id=%d): %s", id, player.Name)
 	}
 
-	player, err = db.PlayerByName(name)
+	player, err = db.Players().GetByName(name)
 	if err != nil {
 		t.Errorf("error retrieving player (name=%s)\n%s", name, err)
 	}
@@ -146,7 +140,7 @@ func check_player(t *testing.T, db db.OsnDB, id int64, name string) {
 }
 
 func check_match(t *testing.T, db db.OsnDB, expected osn.LegacyMatch) {
-	match, err := db.MatchByHash(string(expected.MatchHash))
+	match, err := db.Matches().GetByName(string(expected.MatchHash))
 	if err != nil {
 		t.Errorf("error retrieving match %s\n%s\n", match.MatchHash, err)
 	}
@@ -192,9 +186,8 @@ func check_match(t *testing.T, db db.OsnDB, expected osn.LegacyMatch) {
 		if player.RowID != expected.Players[i].RowID {
 			t.Errorf("player %d ID %d != expected %d", i, player.RowID, expected.Players[i].RowID)
 		}
-		// TODO BUGFIX when ordering is swapped (refer to "first_playerid" in metadata)
-		//if player.Name != expected.Players[i].Name {
-		//	t.Errorf("player %d Name %s != expected %s", i, player.Name, expected.Players[i].Name)
-		//}
+		if player.Name != expected.Players[i].Name {
+			t.Errorf("player %d Name %s != expected %s", i, player.Name, expected.Players[i].Name)
+		}
 	}
 }

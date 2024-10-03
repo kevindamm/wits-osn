@@ -30,11 +30,15 @@ import (
 	osn "github.com/kevindamm/wits-osn"
 )
 
-// This satisfies the Record interface for use as Table[T]
+// This satisfies the Record interface for use as Table[*Record]
 // while being only a thin wrapper around the Player struct.
-type PlayerRecord osn.Player
+type PlayerRecord struct {
+	// For it to be a pointer-receiver in the following methods, it needs to be an
+	// embedded struct member rather than a simple alias type.
+	osn.Player
+}
 
-func (player PlayerRecord) Columns() []string {
+func (player *PlayerRecord) Columns() []string {
 	return []string{
 		"id",
 		"gcid",
@@ -66,19 +70,18 @@ func (player *PlayerRecord) ScanRow(row *sql.Row) error {
 }
 
 type tablePlayers struct {
-	tableBase[*PlayerRecord]
-	cachedPlayers map[int64]*PlayerRecord
+	mutableBase[*PlayerRecord]
+	cachedPlayers map[int64]*osn.Player
 }
 
-func MakePlayersTable(sqldb *sql.DB) Table[*PlayerRecord] {
+func MakePlayersTable(sqldb *sql.DB) MutableTable[*PlayerRecord] {
 	return tablePlayers{
-		tableBase: tableBase[*PlayerRecord]{
+		mutableBase: mutableBase[*PlayerRecord]{tableBase[*PlayerRecord]{
 			sqldb:   sqldb,
 			name:    "players",
 			Primary: "id",
-			NameCol: "name",
-		},
-		cachedPlayers: make(map[int64]*PlayerRecord)}
+			NameCol: "name"}},
+		cachedPlayers: make(map[int64]*osn.Player)}
 }
 
 func (table tablePlayers) SqlCreate() string {
@@ -172,16 +175,16 @@ func (record *StandingsRecord) ScanRow(row *sql.Row) error {
 }
 
 type tableStandings struct {
-	tableBase[*StandingsRecord]
-	cached map[int64]*StandingsRecord
+	mutableBase[*StandingsRecord]
+	cached map[int64]osn.PlayerStanding
 }
 
-func MakeStandingsTable(sqldb *sql.DB) Table[*StandingsRecord] {
+func MakeStandingsTable(sqldb *sql.DB) MutableTable[*StandingsRecord] {
 	return tableStandings{
-		tableBase[*StandingsRecord]{
+		mutableBase[*StandingsRecord]{tableBase[*StandingsRecord]{
 			sqldb: sqldb,
-			name:  "standings"},
-		make(map[int64]*StandingsRecord)}
+			name:  "standings"}},
+		make(map[int64]osn.PlayerStanding)}
 }
 
 func (tableStandings) SqlCreate() string {

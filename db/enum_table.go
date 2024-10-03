@@ -74,9 +74,9 @@ func (table EnumTable[T]) Strings() []string {
 
 func (table EnumTable[T]) SqlCreate() string {
 	return fmt.Sprintf(`CREATE TABLE "%s" (
-	   "id"    INTEGER PRIMARY KEY,
-	   "name"  TEXT NOT NULL
-	 ) WITHOUT ROWID;`, table.name)
+     "id"    INTEGER PRIMARY KEY,
+     "name"  TEXT NOT NULL
+   ) WITHOUT ROWID;`, table.name)
 }
 
 func (table EnumTable[T]) SqlInit() string {

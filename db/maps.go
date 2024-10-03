@@ -69,9 +69,24 @@ func (record LegacyMapRecord) NamedValues() ([]driver.NamedValue, error) {
 }
 
 func (record LegacyMapRecord) ScanValues(values ...driver.Value) error {
-
-	// TODO
-	return nil
+	var ok bool
+	record.MapID, ok = values[0].(uint8)
+	if !ok {
+		return fmt.Errorf("LegacyMap.MapID value %v not uint8", values[0])
+	}
+	record.Name, ok = values[1].(string)
+	if !ok {
+		return fmt.Errorf("LegacyMap.Name value %v not string", values[1])
+	}
+	record.PlayerCount, ok = values[2].(int)
+	if !ok {
+		return fmt.Errorf("LegacyMap.PlayerCount value %v not int", values[2])
+	}
+	bytes, ok := values[3].([]byte)
+	if !ok {
+		return fmt.Errorf("LegacyMap.Details value %v not []byte", values[3])
+	}
+	return json.Unmarshal(bytes, &record.LegacyMapDetails)
 }
 
 func (record LegacyMapRecord) ScanRow(row *sql.Row) error {
