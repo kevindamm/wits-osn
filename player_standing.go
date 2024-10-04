@@ -26,10 +26,10 @@ import "fmt"
 
 // An ELO-like measurement [points], and the player's league + standings status.
 type PlayerStanding struct {
-	league LeagueEnum
-	rank   LeagueRank
-	points uint16
-	delta  int8 // difference since [points] of previous standings.
+	League LeagueEnum
+	Rank   LeagueRank
+	Points uint16
+	Delta  int8 // difference since [points] of previous standings.
 }
 
 func NewStanding(league LeagueEnum, rank LeagueRank, points uint16, delta int8) (PlayerStanding, error) {
@@ -42,13 +42,8 @@ func NewStanding(league LeagueEnum, rank LeagueRank, points uint16, delta int8) 
 	return PlayerStanding{league, rank, points, delta}, nil
 }
 
-func (ranked PlayerStanding) League() LeagueEnum  { return ranked.league }
-func (ranked PlayerStanding) Rank() LeagueRank    { return ranked.rank }
-func (ranked PlayerStanding) PointsAfter() uint16 { return ranked.points }
-func (ranked PlayerStanding) Delta() int8         { return ranked.delta }
-
 func (ranked PlayerStanding) PointsBefore() uint16 {
-	return uint16(int(ranked.points) - int(ranked.delta))
+	return uint16(int(ranked.Points) - int(ranked.Delta))
 }
 
 func UnknownStanding() PlayerStanding {

@@ -24,7 +24,9 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"log"
+	"strings"
 
 	osn "github.com/kevindamm/wits-osn"
 	_ "github.com/mattn/go-sqlite3"
@@ -129,3 +131,40 @@ func (db *osndb) MapByName(name string) (osn.LegacyMap, error) {
 func (db *osndb) Players() MutableTable[*PlayerRecord]      { return db.players }
 func (db *osndb) Matches() MutableTable[*LegacyMatchRecord] { return db.matches }
 func (db *osndb) Standings() MutableTable[*StandingsRecord] { return db.standings }
+
+// Only needs to be called once at database setup.  Also closes the database.
+// Will LOG(FATAL) an error if creation or initialization fail, with SQL error.
+func CreateTablesAndClose(db_path string) error {
+	witsdb, err := open_database(db_path)
+	if err != nil {
+		return errors.New("could not open WitsDB database")
+	}
+	// By closing the connection we also auto-close any transactions,
+	// as a defense against any
+	defer witsdb.Close()
+
+	for _, table := range []TableSql{
+		witsdb.status,
+		witsdb.leagues,
+		witsdb.races,
+		witsdb.maps,
+		witsdb.players,
+		witsdb.matches,
+		witsdb.roles,
+		witsdb.standings,
+	} {
+		log.Println("creating table '" + table.Name() + "'")
+		must_execsql(witsdb.sqldb, table.SqlCreate())
+
+		initsql := table.SqlInit()
+		if initsql != "" {
+			log.Println("populating table '" + table.Name() + "'")
+			statements := strings.Split(initsql, ";")
+			for _, sql := range statements {
+				must_execsql(witsdb.sqldb, sql)
+			}
+		}
+	}
+
+	return nil
+}

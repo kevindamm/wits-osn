@@ -38,8 +38,8 @@ func (LegacyMapRecord) Columns() []string {
 	return []string{"map_id", "map_name", "player_count", "details"}
 }
 
-func (record LegacyMapRecord) Values() ([]driver.Value, error) {
-	return []driver.Value{
+func (record LegacyMapRecord) Values() ([]any, error) {
+	return []any{
 		record.MapID,
 		record.Name,
 		record.PlayerCount,
@@ -93,6 +93,16 @@ func (record *LegacyMapRecord) ScanRow(row *sql.Row) error {
 	bytes := make([]byte, 0)
 	row.Scan(&record.MapID, &record.Name, &record.PlayerCount, &bytes)
 	return json.Unmarshal(bytes, &record.LegacyMapDetails)
+}
+
+// This is provided for completeness but it has a flaw in that the details are
+// not recoverable.  However, at present this method is only called from the
+// `SELECT * FROM maps;` path, so it actually works out to get an abbreviation.
+func (record *LegacyMapRecord) Scannables() []any {
+	bytes := make([]byte, 0)
+	return []any{
+		&record.MapID, &record.Name, &record.PlayerCount, &bytes,
+	}
 }
 
 type tableMaps struct {

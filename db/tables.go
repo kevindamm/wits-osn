@@ -25,7 +25,6 @@ package db
 import (
 	"database/sql"
 	"database/sql/driver"
-	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -34,10 +33,12 @@ import (
 // Abstraction over the structural type of values in a table or group of tables.
 type Record interface {
 	Columns() []string
-	Values() ([]driver.Value, error)
+	Values() ([]any, error)
 	NamedValues() ([]driver.NamedValue, error)
+
 	ScanValues(...driver.Value) error
 	ScanRow(*sql.Row) error
+	Scannables() []any
 }
 
 // The SQL-specific features of a relational table.  Fortunately, these have
@@ -64,43 +65,6 @@ type MutableTable[T Record] interface {
 	Table[T]
 	Insert(T) error
 	Delete(int64) error
-}
-
-// Only needs to be called once at database setup.  Also closes the database.
-// Will LOG(FATAL) an error if creation or initialization fail, with SQL error.
-func CreateTablesAndClose(db_path string) error {
-	witsdb, err := open_database(db_path)
-	if err != nil {
-		return errors.New("could not open WitsDB database")
-	}
-	// By closing the connection we also auto-close any transactions,
-	// as a defense against any
-	defer witsdb.Close()
-
-	for _, table := range []TableSql{
-		witsdb.status,
-		witsdb.leagues,
-		witsdb.races,
-		witsdb.maps,
-		witsdb.players,
-		witsdb.matches,
-		witsdb.roles,
-		witsdb.standings,
-	} {
-		log.Println("creating table '" + table.Name() + "'")
-		must_execsql(witsdb.sqldb, table.SqlCreate())
-
-		initsql := table.SqlInit()
-		if initsql != "" {
-			log.Println("populating table '" + table.Name() + "'")
-			statements := strings.Split(initsql, ";")
-			for _, sql := range statements {
-				must_execsql(witsdb.sqldb, sql)
-			}
-		}
-	}
-
-	return nil
 }
 
 // Abstraction over one or more relational tables,
@@ -172,9 +136,43 @@ func (table tableBase[T]) GetByName(name string) (T, error) {
 }
 
 func (table tableBase[T]) SelectAll() (<-chan T, error) {
+	colnames := table.zero.Columns()
+	query := fmt.Sprintf(`SELECT (%s) FROM %s;`,
+		strings.Join(colnames, ", "), table.name)
 
-	// TODO
-	return nil, nil
+	stmt, err := table.sqldb.Prepare(query)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := stmt.Query()
+	if err != nil {
+		return nil, err
+	}
+
+	channel := make(chan T)
+	go func() {
+		defer close(channel)
+		defer rows.Close()
+
+		for rows.Next() {
+			var value T
+			if rows.Err() != nil {
+				return
+			}
+			rows.Scan(value.Scannables()...)
+			channel <- value
+		}
+	}()
+
+	return channel, nil
+}
+
+func qmarks(count int) string {
+	str := make([]string, count)
+	for i := range count {
+		str[i] = "?"
+	}
+	return strings.Join(str, ", ")
 }
 
 type mutableBase[T Record] struct {
@@ -185,14 +183,47 @@ type mutableBase[T Record] struct {
 // When a non-zero value is used as the record's primary key, if that record
 // already existed it returns an error.
 func (table mutableBase[T]) Insert(record T) error {
+	colnames := record.Columns()
+	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
+		table.name, colnames, qmarks(len(colnames)))
+	stmt, err := table.sqldb.Prepare(query)
+	if err != nil {
+		return err
+	}
 
-	// TODO
+	values, err := record.Values()
+	if err != nil {
+		return err
+	}
+	_, err = stmt.Exec(values...)
+	if err != nil {
+		return err
+	}
+	fmt.Println()
+
+	// TODO set the rowid value on `record`, if needed.
+	// record.SetPrimary(exec_result.LastInsertId()) or similar
 	return nil
 }
 
 func (table mutableBase[T]) Delete(id int64) error {
-
-	// TODO
+	primary_key := table.Primary
+	if primary_key == "" {
+		primary_key = "rowid"
+	}
+	sql := fmt.Sprintf("DELETE FROM %s WHERE %s = ?;",
+		table.name, primary_key)
+	result, err := table.sqldb.Exec(sql, id)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return fmt.Errorf("no rows affected by DELETE(%s, %d)", table.name, id)
+	}
 	return nil
 }
 

@@ -48,8 +48,8 @@ func (*LegacyMatchRecord) Columns() []string {
 	}
 }
 
-func (record *LegacyMatchRecord) Values() ([]driver.Value, error) {
-	return []driver.Value{
+func (record *LegacyMatchRecord) Values() ([]any, error) {
+	return []any{
 		record.MatchIndex,
 		record.MatchHash,
 		record.Competitive,
@@ -158,6 +158,20 @@ func (record *LegacyMatchRecord) ScanRow(row *sql.Row) error {
 	return nil
 }
 
+func (record *LegacyMatchRecord) Scannables() []any {
+	return []any{
+		&record.MatchIndex,
+		&record.MatchHash,
+		&record.Competitive,
+		&record.Season,
+		&record.StartTime,
+		&record.MapID,
+		&record.TurnCount,
+		&record.Version,
+		&record.FetchStatus,
+	}
+}
+
 // The `matches` metadata relates to an instance of a game between two
 // players.  This differs from the serialized replays that define all of
 // each game's turns, or `roles` which uniquely indexes the players to
@@ -215,9 +229,11 @@ func (*PlayerRoleRecord) Columns() []string {
 	return []string{"match_id", "player_id", "turn_order"}
 }
 
-func (record *PlayerRoleRecord) Values() ([]driver.Value, error) {
-	return []driver.Value{
-			record.MatchID, record.PlayerID, record.TurnOrder},
+func (record *PlayerRoleRecord) Values() ([]any, error) {
+	return []any{
+			record.MatchID,
+			record.PlayerID,
+			record.TurnOrder},
 		nil
 }
 
@@ -257,6 +273,13 @@ func (record *PlayerRoleRecord) ScanValues(values ...driver.Value) error {
 
 func (record *PlayerRoleRecord) ScanRow(row *sql.Row) error {
 	return row.Scan(&record.MatchID, &record.PlayerID, &record.TurnOrder)
+}
+
+func (record *PlayerRoleRecord) Scannables() []any {
+	return []any{
+		&record.MatchID,
+		&record.PlayerID,
+		&record.TurnOrder}
 }
 
 type tableRoles struct {

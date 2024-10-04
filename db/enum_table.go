@@ -139,13 +139,15 @@ func (EnumRecord[T]) Columns() []string {
 	return []string{"id", "name"}
 }
 
-func (record EnumRecord[T]) Values() ([]driver.Value, error) {
+func (record EnumRecord[T]) Values() ([]any, error) {
 	if !record.value.IsValid() {
-		return []driver.Value{}, fmt.Errorf("invalid value %d", record.value)
+		return nil, fmt.Errorf("invalid value %d", record.value)
 	}
-	return []driver.Value{
-		uint8(record.value), string(record.value),
-	}, nil
+
+	return []any{
+			uint8(record.value),
+			string(record.value)},
+		nil
 }
 
 func (record EnumRecord[T]) NamedValues() ([]driver.NamedValue, error) {
@@ -170,4 +172,8 @@ func (EnumRecord[T]) ScanValues(...driver.Value) error {
 
 func (EnumRecord[T]) ScanRow(row *sql.Row) error {
 	return errors.New("enums are immutable")
+}
+
+func (EnumRecord[T]) Scannables() []any {
+	return make([]any, 0)
 }

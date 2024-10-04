@@ -46,27 +46,57 @@ func (player *PlayerRecord) Columns() []string {
 	}
 }
 
-func (player *PlayerRecord) Values() ([]driver.Value, error) {
-
-	// TODO
-	return []driver.Value{}, nil
+func (player *PlayerRecord) Values() ([]any, error) {
+	return []any{
+			player.RowID,
+			player.GCID,
+			player.Name},
+		nil
 }
 
 func (player *PlayerRecord) NamedValues() ([]driver.NamedValue, error) {
-
-	// TODO
-	return nil, nil
+	return []driver.NamedValue{
+		{
+			Name:    "id",
+			Ordinal: 0,
+			Value:   player.RowID},
+		{
+			Name:    "gcid",
+			Ordinal: 1,
+			Value:   player.GCID},
+		{
+			Name:    "name",
+			Ordinal: 2,
+			Value:   player.Name},
+	}, nil
 }
 
 func (player *PlayerRecord) ScanValues(values ...driver.Value) error {
-
-	// TODO
+	var ok bool
+	player.RowID, ok = values[0].(int64)
+	if !ok {
+		return fmt.Errorf("Player.RowID value %v not int64", values[0])
+	}
+	player.GCID, ok = values[1].(string)
+	if !ok {
+		return fmt.Errorf("Player.GCID value %v not string", values[1])
+	}
+	player.Name, ok = values[2].(string)
+	if !ok {
+		return fmt.Errorf("Player.Name value %v not string", values[2])
+	}
 	return nil
 }
 
 func (player *PlayerRecord) ScanRow(row *sql.Row) error {
-	// TODO
-	return nil
+	return row.Scan(&player.RowID, &player.GCID, &player.Name)
+}
+
+func (player *PlayerRecord) Scannables() []any {
+	return []any{
+		&player.RowID,
+		&player.GCID,
+		&player.Name}
 }
 
 type tablePlayers struct {
@@ -117,16 +147,15 @@ func (*StandingsRecord) Columns() []string {
 	}
 }
 
-func (record *StandingsRecord) Values() ([]driver.Value, error) {
-	// TODO
-	return []driver.Value{
-		record.After,
-		record.Until,
-		record.League(),
-		record.Rank(),
-		record.PointsAfter(),
-		record.Delta(),
-	}, nil
+func (record *StandingsRecord) Values() ([]any, error) {
+	return []any{
+			record.After,
+			record.Until,
+			record.League,
+			record.Rank,
+			record.Points,
+			record.Delta},
+		nil
 }
 
 func (record *StandingsRecord) NamedValues() ([]driver.NamedValue, error) {
@@ -144,34 +173,69 @@ func (record *StandingsRecord) NamedValues() ([]driver.NamedValue, error) {
 		{
 			Name:    "player_league",
 			Ordinal: 3,
-			Value:   record.League(),
+			Value:   record.League,
 		},
 		{
 			Name:    "player_rank",
 			Ordinal: 4,
-			Value:   record.Rank(),
+			Value:   record.Rank,
 		},
 		{
 			Name:    "player_points",
 			Ordinal: 5,
-			Value:   record.PointsAfter(),
+			Value:   record.Points,
 		},
 		{
 			Name:    "player_delta",
 			Ordinal: 6,
-			Value:   record.Delta(),
+			Value:   record.Delta,
 		},
 	}, nil
 }
 
-func (record *StandingsRecord) ScanValues(...driver.Value) error {
-	// TODO
+func (record *StandingsRecord) ScanValues(values ...driver.Value) error {
+	var ok bool
+	record.After, ok = values[0].(int64)
+	if !ok {
+		return fmt.Errorf("Standings.After value %v not int64", values[0])
+	}
+	record.Until, ok = values[1].(int64)
+	if !ok {
+		return fmt.Errorf("Standings.Before value %v not int64", values[1])
+	}
+	league, ok := values[2].(uint8)
+	if !ok {
+		return fmt.Errorf("Standings.League value %v not uint8", values[2])
+	}
+	record.League = osn.LeagueEnum(league)
+	rank, ok := values[3].(uint8)
+	if !ok {
+		return fmt.Errorf("Standings.Rank value %v not uint8", values[3])
+	}
+	record.Rank = osn.LeagueRank(rank)
+	record.Points, ok = values[4].(uint16)
+	if !ok {
+		return fmt.Errorf("Standings.Points value %v not uint16", values[4])
+	}
+	record.Delta, ok = values[5].(int8)
+	if !ok {
+		return fmt.Errorf("Standings.Delta value %v not int8", values[5])
+	}
 	return nil
 }
 
 func (record *StandingsRecord) ScanRow(row *sql.Row) error {
-	// TODO
-	return nil
+	return row.Scan(record.Scannables())
+}
+
+func (record *StandingsRecord) Scannables() []any {
+	return []any{
+		&record.After,
+		&record.Until,
+		&record.League,
+		&record.Rank,
+		&record.Points,
+		&record.Delta}
 }
 
 type tableStandings struct {

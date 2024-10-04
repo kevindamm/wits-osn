@@ -48,7 +48,7 @@ func TestDB(t *testing.T) {
 	// Closing and re-opening the database should still include the tables above.
 	osndb := db.OpenOsnDB(file.Name())
 
-	mapobj, err := osndb.Map("machination")
+	mapobj, err := osndb.MapByID(1)
 	if err != nil {
 		t.Errorf("could not find map ID 1: %s", err)
 	}
@@ -56,7 +56,7 @@ func TestDB(t *testing.T) {
 		t.Error("retrieved incorrect map for ID 1")
 	}
 
-	mapobj, err = osndb.Map("foundry")
+	mapobj, err = osndb.MapByName("foundry")
 	if err != nil {
 		t.Errorf("could not find map ID 3 (foundry): %s", err)
 	}
@@ -173,8 +173,8 @@ func check_match(t *testing.T, db db.OsnDB, expected osn.LegacyMatch) {
 	if match.Version != expected.Version {
 		t.Errorf("version %d != expected.version %d", match.Version, expected.Version)
 	}
-	if match.Status != expected.Status {
-		t.Errorf("status %d != expected.status %d", match.Status, expected.Status)
+	if match.FetchStatus != expected.FetchStatus {
+		t.Errorf("status %d != expected.status %d", match.FetchStatus, expected.FetchStatus)
 	}
 
 	if len(match.Players) != len(expected.Players) {
