@@ -26,13 +26,13 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
+	"time"
 
 	osn "github.com/kevindamm/wits-osn"
 )
 
 type LegacyMatchRecord struct {
-	// Embedded so that type inference on Table[LegacyMatchRecord] works.
-	// TODO consider generalizing on a ProtoRecord*, avoiding awkward requirement.
+	// Embedded so that type inference on Table[*LegacyMatchRecord] works.
 	osn.LegacyMatch
 }
 
@@ -42,32 +42,119 @@ func NewMatchRecord(match osn.LegacyMatch) *LegacyMatchRecord {
 
 func (*LegacyMatchRecord) Columns() []string {
 	return []string{
+		"rowid",
 		"match_hash", "competitive", "season", "start_time",
-		"map_id", "turn_count", "version", "status",
+		"map_id", "turn_count", "version", "fetch_status",
 	}
 }
 
 func (record *LegacyMatchRecord) Values() ([]driver.Value, error) {
-
-	// TODO
-	return []driver.Value{}, nil
+	return []driver.Value{
+		record.MatchIndex,
+		record.MatchHash,
+		record.Competitive,
+		record.Season,
+		record.StartTime,
+		record.MapID,
+		record.TurnCount,
+		record.Version,
+		record.FetchStatus}, nil
 }
 
 func (record *LegacyMatchRecord) NamedValues() ([]driver.NamedValue, error) {
-
-	// TODO
-	return []driver.NamedValue{}, nil
+	return []driver.NamedValue{
+		{
+			Name:    "rowid",
+			Ordinal: 0,
+			Value:   record.MatchIndex},
+		{
+			Name:    "match_hash",
+			Ordinal: 1,
+			Value:   record.MatchHash},
+		{
+			Name:    "competitive",
+			Ordinal: 2,
+			Value:   record.Competitive},
+		{
+			Name:    "season",
+			Ordinal: 3,
+			Value:   record.Season},
+		{
+			Name:    "start_time",
+			Ordinal: 4,
+			Value:   record.StartTime},
+		{
+			Name:    "map_id",
+			Ordinal: 5,
+			Value:   record.MapID},
+		{
+			Name:    "turn_count",
+			Ordinal: 6,
+			Value:   record.TurnCount},
+		{
+			Name:    "version",
+			Ordinal: 7,
+			Value:   record.Version},
+		{
+			Name:    "fetch_status",
+			Ordinal: 8,
+			Value:   record.FetchStatus},
+	}, nil
 }
 
-func (record *LegacyMatchRecord) ScanValues(...driver.Value) error {
-
-	// TODO
+func (record *LegacyMatchRecord) ScanValues(values ...driver.Value) error {
+	var ok bool
+	record.MatchIndex, ok = values[0].(int64)
+	if !ok {
+		return fmt.Errorf("LegacyMatch.MatchIndex value %v not int64", values[0])
+	}
+	match_hash, ok := values[1].(string)
+	if !ok {
+		return fmt.Errorf("LegacyMatch.MatchHash value %v not string", values[1])
+	}
+	record.MatchHash = osn.GameID(match_hash)
+	record.Competitive, ok = values[2].(bool)
+	if !ok {
+		return fmt.Errorf("LegacyMatch.Competitive value %v not boolean", values[2])
+	}
+	record.Season, ok = values[3].(int)
+	if !ok {
+		return fmt.Errorf("LegacyMatch.Season value %v not int", values[3])
+	}
+	record.StartTime, ok = values[4].(time.Time)
+	if !ok {
+		return fmt.Errorf("LegacyMatch.StartTime value %v not time.Time", values[4])
+	}
+	record.MapID, ok = values[5].(int)
+	if !ok {
+		return fmt.Errorf("LegacyMatch.MapID value %v not int", values[5])
+	}
+	record.TurnCount, ok = values[6].(int)
+	if !ok {
+		return fmt.Errorf("LegacyMatch.TurnCount value %v not int", values[6])
+	}
+	record.Version, ok = values[7].(int)
+	if !ok {
+		return fmt.Errorf("LegacyMatch.Version value %v not int", values[7])
+	}
+	record.FetchStatus, ok = values[8].(osn.FetchStatus)
+	if !ok {
+		return fmt.Errorf("LegacyMatch.FetchStatus value %v not valid", values[8])
+	}
 	return nil
 }
 
-func (record *LegacyMatchRecord) ScanRow(*sql.Row) error {
-
-	// TODO
+func (record *LegacyMatchRecord) ScanRow(row *sql.Row) error {
+	row.Scan(
+		&record.MatchIndex,
+		&record.MatchHash,
+		&record.Competitive,
+		&record.Season,
+		&record.StartTime,
+		&record.MapID,
+		&record.TurnCount,
+		&record.Version,
+		&record.FetchStatus)
 	return nil
 }
 
@@ -92,16 +179,16 @@ func MakeMatchesTable(sqldb *sql.DB) MutableTable[*LegacyMatchRecord] {
 func (table tableMatches) SqlCreate() string {
 	return fmt.Sprintf(`CREATE TABLE "%s" (
     -- rowid INTEGER PRIMARY KEY AUTOINCREMENT, -- legacy "id" or Index
-    "match_hash"   TEXT NOT NULL UNIQUE,
-    "competitive"  BOOLEAN,    -- league or friendly
-    "season"       INTEGER,    -- seasons are of variable duration
-    "start_time"   TIMESTAMP,  -- time at creation, UTC
+    "match_hash"    TEXT NOT NULL UNIQUE,
+    "competitive"   BOOLEAN,    -- league or friendly
+    "season"        INTEGER,    -- seasons are of variable duration
+    "start_time"    TIMESTAMP,  -- time at creation, UTC
 
-    "map_id"       INTEGER,    -- MapEnum
-    "turn_count"   INTEGER,    -- number of turns (= one ply) for the match
+    "map_id"        INTEGER,    -- MapEnum
+    "turn_count"    INTEGER,    -- number of turns (= one ply) for the match
 
-    "version"      INTEGER,    -- engine (runtime) version for this match
-    "status"       INTEGER,    -- this match's fetch_status
+    "version"       INTEGER,    -- engine (runtime) version for this match
+    "fetch_status"  INTEGER,    -- this match's fetch_status
 
     FOREIGN KEY (map_id)
       REFERENCES maps (map_id)
@@ -118,34 +205,58 @@ func (tableMatches) SqlInit() string {
 
 // Relation for which players are participating in which matches, and the turn
 // order they are assigned to.  Appropriate for both 1v1 and 2v2 matches.
-type PlayerRoleRecord osn.PlayerRole
+type PlayerRoleRecord struct {
+	MatchID   int64
+	PlayerID  int64
+	TurnOrder osn.PlayerColorEnum
+}
 
-func (PlayerRoleRecord) Columns() []string {
+func (*PlayerRoleRecord) Columns() []string {
 	return []string{"match_id", "player_id", "turn_order"}
 }
 
-func (record PlayerRoleRecord) Values() ([]driver.Value, error) {
-
-	// TODO
-	return []driver.Value{}, nil
+func (record *PlayerRoleRecord) Values() ([]driver.Value, error) {
+	return []driver.Value{
+			record.MatchID, record.PlayerID, record.TurnOrder},
+		nil
 }
 
-func (record PlayerRoleRecord) NamedValues() ([]driver.NamedValue, error) {
-
-	// TODO
-	return nil, nil
+func (record *PlayerRoleRecord) NamedValues() ([]driver.NamedValue, error) {
+	return []driver.NamedValue{
+		{
+			Name:    "match_id",
+			Ordinal: 1,
+			Value:   record.MatchID},
+		{
+			Name:    "player_id",
+			Ordinal: 2,
+			Value:   record.PlayerID},
+		{
+			Name:    "turn_order",
+			Ordinal: 3,
+			Value:   record.TurnOrder},
+	}, nil
 }
 
-func (record PlayerRoleRecord) ScanValues(...driver.Value) error {
-
-	// TODO
+func (record *PlayerRoleRecord) ScanValues(values ...driver.Value) error {
+	var ok bool
+	record.MatchID, ok = values[0].(int64)
+	if !ok {
+		return fmt.Errorf("PlayerRole.MatchID value %v not int64", values[0])
+	}
+	record.PlayerID, ok = values[1].(int64)
+	if !ok {
+		return fmt.Errorf("PlayerRole.PlayerID value %v not int64", values[1])
+	}
+	record.TurnOrder, ok = values[2].(osn.PlayerColorEnum)
+	if !ok {
+		return fmt.Errorf("PlayerRole.TurnOrder value %v not 1-4", values[2])
+	}
 	return nil
 }
 
-func (record PlayerRoleRecord) ScanRow(*sql.Row) error {
-
-	// TODO
-	return nil
+func (record *PlayerRoleRecord) ScanRow(row *sql.Row) error {
+	return row.Scan(&record.MatchID, &record.PlayerID, &record.TurnOrder)
 }
 
 type tableRoles struct {

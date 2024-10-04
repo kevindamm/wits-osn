@@ -78,7 +78,10 @@ func BackfillFromIndex(witsdb db.OsnDB, tsv_path string) error {
 			MapName:     values[indices["map_name"]],
 			TurnCount:   values[indices["turn_count"]],
 		}
-		_, err := witsdb.Map(assert_int8(values[indices["map_id"]]))
+
+		map_id := assert_int8(values[indices["map_id"]])
+		map_name := fmt.Sprintf("%d", map_id) // TODO lookup name from DB
+		_, err := witsdb.Map(map_name)
 		if err != nil {
 			return err
 		}
@@ -114,11 +117,13 @@ func BackfillFromIndex(witsdb db.OsnDB, tsv_path string) error {
 
 		players := metadata.Players()
 		for _, player := range players {
-			witsdb.Players().Insert(&player)
+			record := db.PlayerRecord{Player: player}
+			witsdb.Players().Insert(&record)
 		}
 
 		match := metadata.ToLegacyMatch()
-		witsdb.Matches().Insert(&match)
+		record := db.LegacyMatchRecord{LegacyMatch: match}
+		witsdb.Matches().Insert(&record)
 
 		if true {
 			// TODO only processing one record until the schema transform is complete

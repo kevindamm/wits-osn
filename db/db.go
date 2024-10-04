@@ -36,7 +36,8 @@ import (
 type OsnDB interface {
 	Close() // Closes the database, including open rows and prepared statements.
 
-	Map(name string) (osn.LegacyMap, error)
+	MapByID(id uint8) (osn.LegacyMap, error)
+	MapByName(name string) (osn.LegacyMap, error)
 
 	Players() MutableTable[*PlayerRecord]
 	Matches() MutableTable[*LegacyMatchRecord]
@@ -63,7 +64,7 @@ type osndb struct {
 	leagues EnumTable[osn.LeagueEnum]
 	races   EnumTable[osn.UnitRaceEnum]
 
-	maps Table[LegacyMapRecord]
+	maps Table[*LegacyMapRecord]
 
 	players   MutableTable[*PlayerRecord]
 	matches   MutableTable[*LegacyMatchRecord]
@@ -109,9 +110,20 @@ func (db *osndb) Close() {
 	db.sqldb.Close()
 }
 
-func (db *osndb) Map(name string) (osn.LegacyMap, error) {
-	// TODO
-	return osn.UnknownMap(), nil
+func (db *osndb) MapByID(id uint8) (osn.LegacyMap, error) {
+	record, err := db.maps.Get(int64(id))
+	if err != nil {
+		return osn.UnknownMap(), err
+	}
+	return osn.LegacyMap(*record), nil
+}
+
+func (db *osndb) MapByName(name string) (osn.LegacyMap, error) {
+	record, err := db.maps.GetByName(name)
+	if err != nil {
+		return osn.UnknownMap(), err
+	}
+	return osn.LegacyMap(*record), nil
 }
 
 func (db *osndb) Players() MutableTable[*PlayerRecord]      { return db.players }

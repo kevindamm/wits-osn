@@ -42,11 +42,10 @@ type LegacyMatch struct {
 	MapID       int       `json:"mapid"`
 	TurnCount   int       `json:"turn_count"`
 
-	Version int `json:"engine"`
-	Status  int `json:"-"`
+	Version     int         `json:"engine"`
+	FetchStatus FetchStatus `json:"-"`
 
-	Players []Player `json:"players,omitempty"`
-	First   string   `json:"first_playerid,omitempty"`
+	Players []PlayerRole `json:"players,omitempty"`
 }
 
 const UNKNOWN_MATCH_ID = GameID("")
@@ -175,9 +174,9 @@ func (metadata *LegacyReplayMetadata) ToLegacyMatch() LegacyMatch {
 		Version:     int(assert_int64(metadata.OsnVersion)),
 	}
 	if metadata.NumPlayers == "4" {
-		match.Players = make([]Player, 4)
+		match.Players = make([]PlayerRole, 4)
 	} else if metadata.NumPlayers == "2" {
-		match.Players = make([]Player, 2)
+		match.Players = make([]PlayerRole, 2)
 	} else {
 		log.Fatalf("metadata has unexpected NumPlayers %s", metadata.NumPlayers)
 	}

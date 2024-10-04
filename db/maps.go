@@ -68,7 +68,7 @@ func (record LegacyMapRecord) NamedValues() ([]driver.NamedValue, error) {
 	}, nil
 }
 
-func (record LegacyMapRecord) ScanValues(values ...driver.Value) error {
+func (record *LegacyMapRecord) ScanValues(values ...driver.Value) error {
 	var ok bool
 	record.MapID, ok = values[0].(uint8)
 	if !ok {
@@ -89,20 +89,20 @@ func (record LegacyMapRecord) ScanValues(values ...driver.Value) error {
 	return json.Unmarshal(bytes, &record.LegacyMapDetails)
 }
 
-func (record LegacyMapRecord) ScanRow(row *sql.Row) error {
+func (record *LegacyMapRecord) ScanRow(row *sql.Row) error {
 	bytes := make([]byte, 0)
 	row.Scan(&record.MapID, &record.Name, &record.PlayerCount, &bytes)
 	return json.Unmarshal(bytes, &record.LegacyMapDetails)
 }
 
 type tableMaps struct {
-	tableBase[LegacyMapRecord]
+	tableBase[*LegacyMapRecord]
 	cachedMaps map[string]osn.LegacyMap
 }
 
-func MakeMapsTable(sqldb *sql.DB) Table[LegacyMapRecord] {
+func MakeMapsTable(sqldb *sql.DB) Table[*LegacyMapRecord] {
 	return tableMaps{
-		tableBase: tableBase[LegacyMapRecord]{
+		tableBase: tableBase[*LegacyMapRecord]{
 			sqldb:   sqldb,
 			name:    "maps",
 			Primary: "map_id",
