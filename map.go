@@ -42,20 +42,30 @@ type LegacyMap struct {
 }
 
 func UnknownMap() LegacyMap {
-	terrain := make([]byte, 0)
-	units := make([]byte, 0)
 	return LegacyMap{0, "UNKNOWN", 0,
-		LegacyMapDetails{Filename: "", Terrain: terrain, Units: units}}
+		LegacyMapDetails{Filename: ""}}
 }
 
 type LegacyMapDetails struct {
-	Filename string `json:"-"`
-	Theme    int    `json:"map_theme"`
-	Terrain  []byte `json:"terrain,omitempty"`
-	Units    []byte `json:"units,omitempty"`
-	Width    int    `json:"columns"`
-	Height   int    `json:"rows"`
+	Filename string         `json:"-"`
+	Width    int            `json:"columns"`
+	Height   int            `json:"rows"`
+	Theme    int            `json:"theme"`
+	Defaults map[string]int `json:"defaults"`
+	Init     []MapTileInit  `json:"background"`
 }
+
+type MapTileInit struct {
+	I     int         `json:"i"`
+	J     int         `json:"j"`
+	Type  MapTileType `json:"type"`
+	Sub   SpriteIndex `json:"sub,omitempty"`
+	Owner PlayerIndex `json:"owner,omitempty"`
+}
+
+type MapTileType uint8
+type SpriteIndex uint8
+type PlayerIndex uint8
 
 // Hands the structure to a database driver using JSON serializagion.
 func (details LegacyMapDetails) Value() (driver.Value, error) {
