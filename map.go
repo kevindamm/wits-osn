@@ -22,12 +22,6 @@
 
 package osn
 
-import (
-	"database/sql/driver"
-	"encoding/json"
-	"errors"
-)
-
 type LegacyMap struct {
 	MapID uint8  `json:"map_id"`
 	Name  string `json:"name"`
@@ -38,7 +32,7 @@ type LegacyMap struct {
 
 	// Embedded type avoids the extra indirection
 	// while facilitating compact table representation.
-	LegacyMapDetails `json:"details,omitempty"`
+	LegacyMapDetails
 }
 
 func UnknownMap() LegacyMap {
@@ -47,7 +41,7 @@ func UnknownMap() LegacyMap {
 }
 
 type LegacyMapDetails struct {
-	Filename string         `json:"-"`
+	Filename string         `json:"filename"`
 	Width    int            `json:"columns"`
 	Height   int            `json:"rows"`
 	Theme    int            `json:"theme"`
@@ -67,16 +61,16 @@ type MapTileType uint8
 type SpriteIndex uint8
 type PlayerIndex uint8
 
-// Hands the structure to a database driver using JSON serializagion.
-func (details LegacyMapDetails) Value() (driver.Value, error) {
-	return json.Marshal(details)
-}
+//// Hands the structure to a database driver using JSON serializagion.
+//func (details LegacyMapDetails) Value() (driver.Value, error) {
+//	return json.Marshal(details)
+//}
 
-// Recovers the structure from a database driver using JSON deserialization.
-func (details *LegacyMapDetails) Scan(value driver.Value) error {
-	bytes, ok := value.([]byte)
-	if !ok {
-		return errors.New("invalid DB-value representation for LegacyMapDetails")
-	}
-	return json.Unmarshal(bytes, details)
-}
+//// Recovers the structure from a database driver using JSON deserialization.
+//func (details *LegacyMapDetails) Scan(value driver.Value) error {
+//	bytes, ok := value.([]byte)
+//	if !ok {
+//		return errors.New("invalid DB-value representation for LegacyMapDetails")
+//	}
+//	return json.Unmarshal(bytes, details)
+//}
