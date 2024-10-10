@@ -24,8 +24,12 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
+	"os"
+	"path"
 
+	osn "github.com/kevindamm/wits-osn"
 	"github.com/kevindamm/wits-osn/db"
 )
 
@@ -38,52 +42,72 @@ func main() {
 		"path to a TSV file containing a legacy backup of replay file metadata")
 	backfill_replays := flag.String("backfill-replays", "",
 		"path to the parent directory where JSON files of wits replays are found")
+	out_path := flag.String("out", ".data/replays/",
+		"path where JSON formatted replay data is written to")
 
 	flag.Parse()
-
-	//replays := FetchPage(0)
-	//for _, replay := range replays {
-	//	replayjson, err := json.Marshal(replay)
-	//	if err != nil {
-	//		fmt.Println(err)
-	//		continue
-	//	}
-	//	fmt.Println(string(replayjson))
-	//}
-
-	//fetcher := NewFetcher()
-	//replay_download, err := fetcher.FetchReplay(replayID)
-	//if err != nil {
-	//	fmt.Println(err)
-	//} else {
-	//	os.WriteFile(fmt.Sprintf("testdata/%s.json", replayID), replay_download, 0644)
-	//	fmt.Println(string(replay_download))
-	//}
-
-	if *create_tables {
-		log.Println("creating DB tables...")
-		db.CreateTablesAndClose(*db_path)
-	}
 
 	witsdb := db.OpenOsnDB(*db_path)
 	defer witsdb.Close()
 
+	if *create_tables {
+		log.Println("creating DB tables...")
+		witsdb.MustCreateAndPopulateTables()
+	}
+
 	if len(*backfill_tsv) > 0 {
 		log.Println("back-filling from legacy DB...")
-		assert_nil(BackfillFromIndex(witsdb, *backfill_tsv))
+		assert_nilerr(BackfillFromIndex(witsdb, *backfill_tsv))
 	}
 	if len(*backfill_replays) > 0 {
 		log.Println("back-filling from legacy replays...")
-		assert_nil(BackfillFromReplays(witsdb, *backfill_replays))
+		assert_nilerr(BackfillFromReplays(witsdb, *backfill_replays))
 	}
 
-	// TODO fetch listing of recent (unaccounted-for) replays
+	assert_nilerr(os.MkdirAll(*out_path, 0755))
 
-	// TODO fetch replays that haven't been fetched already
+	// Fetch listing of recent (unaccounted-for) replays
+	fetcher := NewFetcher(5)
+	replay_index, errs := fetcher.FetchNewReplayIDs(witsdb)
+	count := 0
 
+	// Fetch replays that haven't been fetched already
+	for {
+		select {
+		case replayID, ok := <-replay_index:
+			if ok {
+				replay_path := path.Join(*out_path,
+					fmt.Sprintf("%s.json", replayID.ShortID()))
+				fmt.Printf("fetching %s -> %s", replayID.ShortID(), replay_path)
+				err := fetcher.FetchReplay(replayID, replay_path)
+				if err == nil {
+					count += 1
+					witsdb.UpdateMatchStatus(replayID, osn.STATUS_FETCHED)
+				} else {
+					fmt.Println("ERROR: ", err)
+				}
+			} else {
+				replay_index = nil
+			}
+		case err, ok := <-errs:
+			if ok {
+				fmt.Println("ERROR while fetching index pages")
+				fmt.Println(err)
+				return
+			} else {
+				errs = nil
+			}
+		}
+		if replay_index == nil && errs == nil {
+			break
+		}
+	}
+
+	fmt.Println("fetch of recent replays completed")
+	fmt.Printf("%d new replays fetched", count)
 }
 
-func assert_nil(err error) {
+func assert_nilerr(err error) {
 	if err != nil {
 		log.Fatal(err)
 	}

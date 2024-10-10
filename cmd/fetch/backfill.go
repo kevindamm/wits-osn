@@ -79,12 +79,13 @@ func BackfillFromIndex(witsdb db.OsnDB, tsv_path string) error {
 			TurnCount:   values[indices["turn_count"]],
 		}
 
-		map_id := assert_int8(values[indices["map_id"]])
-		map_name := fmt.Sprintf("%d", map_id) // TODO lookup name from DB
-		_, err := witsdb.Map(map_name)
+		metadata.MapID = values[indices["map_id"]]
+		map_id := assert_uint8(values[indices["map_id"]])
+		osnmap, err := witsdb.MapByID(uint8(map_id))
 		if err != nil {
 			return err
 		}
+		metadata.MapName = osnmap.Name
 
 		playerIDs := split_list(values[indices["player_ids"]])
 		playerNames := split_list(values[indices["player_names"]])
@@ -152,13 +153,13 @@ var EXPECTED_COLUMNS = map[string]bool{
 	"player_ids":     true,
 	"player_leagues": true,
 	"player_races":   true,
-	"player_orders":  true,
 	"map_id":         true,
 	"map_name":       true,
 	"turn_count":     true,
 	"replay_fetched": true,
 	"player_winner":  true,
 	"engine":         true,
+	"first_playerid": true,
 }
 
 func verify_columns(columns []string) map[string]int {
@@ -168,7 +169,7 @@ func verify_columns(columns []string) map[string]int {
 
 	indices := make(map[string]int)
 	for i, columnName := range columns {
-		if _, ok := EXPECTED_COLUMNS[columnName]; ok {
+		if expected := EXPECTED_COLUMNS[columnName]; expected {
 			indices[columnName] = i
 		} else {
 			log.Fatalf("unrecognized column name %s in legacy index\n", columnName)
@@ -181,11 +182,14 @@ func verify_columns(columns []string) map[string]int {
 	return indices
 }
 
-// Convert string into an integer or fail with LOG(FATAL) << error.
-func assert_int8(intstr string) int8 {
+// Convert string into an uint8 or fail with LOG(FATAL) << error.
+func assert_uint8(intstr string) int8 {
 	value64, err := strconv.ParseInt(intstr, 10, 8)
 	if err != nil {
 		log.Fatal(err)
+	}
+	if value64 < 0 || value64 > 255 {
+		log.Fatal("expectued unsigned 8-bit integer, got " + intstr)
 	}
 	return int8(value64)
 }
@@ -193,13 +197,15 @@ func assert_int8(intstr string) int8 {
 func num_players(gametype string) string {
 	if gametype == "4" || gametype == "5" {
 		return "4"
-	} else {
+	} else if gametype != "0" {
 		return "2"
+	} else {
+		return "0"
 	}
 }
 
 func league_match(gametype string) string {
-	gametypeint := assert_int8(gametype)
+	gametypeint := assert_uint8(gametype)
 	if gametypeint%2 > 0 {
 		return "1"
 	}
@@ -207,8 +213,6 @@ func league_match(gametype string) string {
 }
 
 var reListCheck = regexp.MustCompile(`{(.*)(,.*)+}`)
-
-// TODO may need to also handle backquoted quotes?
 var reListItem = regexp.MustCompile(`^("[^"]+"|[^"][^,}]*)[,}]`)
 
 // Splits a string that is formatted as {...} wrapped comma-separated strings.
@@ -228,7 +232,9 @@ func split_list(liststr string) []string {
 	// Parse items incrementally to more clearly avoid the quoted-commas.
 	for reListItem.Match(items) {
 		match := reListItem.FindIndex(items)
-		list = append(list, string(items[:match[1]-1]))
+		item := string(items[:match[1]-1])
+		list = append(list, item)
+		// regexp match already includes the `,` or `}`
 		items = items[match[1]:]
 	}
 
