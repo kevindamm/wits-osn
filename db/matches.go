@@ -36,7 +36,13 @@ type LegacyMatchRecord struct {
 	osn.LegacyMatch
 }
 
-func NewMatchRecord(match osn.LegacyMatch) *LegacyMatchRecord {
+// Returns a zero record for populating with match metadata.
+func NewMatchRecord() *LegacyMatchRecord {
+	return &LegacyMatchRecord{osn.LegacyMatch{}}
+}
+
+// Constructs a LegacyMatchRecord from an osn.LegacyMatch which it encapsulates.
+func MakeMatchRecord(match osn.LegacyMatch) *LegacyMatchRecord {
 	return &LegacyMatchRecord{match}
 }
 
@@ -186,6 +192,8 @@ func MakeMatchesTable(sqldb *sql.DB) MutableTable[*LegacyMatchRecord] {
 		mutableBase[*LegacyMatchRecord]{tableBase[*LegacyMatchRecord]{
 			sqldb:   sqldb,
 			name:    "matches",
+			zero:    NewMatchRecord(),
+			new:     NewMatchRecord,
 			NameCol: "match_hash"}},
 		make(map[osn.GameID]osn.LegacyMatch)}
 }
@@ -207,7 +215,7 @@ func (table tableMatches) SqlCreate() string {
     FOREIGN KEY (map_id)
       REFERENCES maps (map_id)
       ON DELETE CASCADE ON UPDATE NO ACTION,
-    FOREIGN KEY (status)
+    FOREIGN KEY (fetch_status)
       REFERENCES fetch_status (id)
       ON DELETE CASCADE ON UPDATE NO ACTION
   );`, table.name)
@@ -223,6 +231,10 @@ type PlayerRoleRecord struct {
 	MatchID   int64
 	PlayerID  int64
 	TurnOrder osn.PlayerColorEnum
+}
+
+func NewRoleRecord() *PlayerRoleRecord {
+	return &PlayerRoleRecord{}
 }
 
 func (*PlayerRoleRecord) Columns() []string {
@@ -290,7 +302,9 @@ func MakeRolesTable(sqldb *sql.DB) MutableTable[*PlayerRoleRecord] {
 	return tableRoles{
 		mutableBase[*PlayerRoleRecord]{tableBase[*PlayerRoleRecord]{
 			sqldb: sqldb,
-			name:  "roles"}}}
+			name:  "roles",
+			zero:  NewRoleRecord(),
+			new:   NewRoleRecord}}}
 }
 
 func (table tableRoles) SqlCreate() string {

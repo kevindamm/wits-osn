@@ -52,11 +52,14 @@ func MakeEnumTable[T osn.EnumType](tablename string, values []T) EnumTable[T] {
 	return EnumTable[T]{
 		tableBase[Record]{
 			name:    tablename,
-			zero:    EnumRecord[T]{values[0]},
 			Primary: "id",
 			NameCol: "name"},
 		values,
 		naming}
+}
+
+func (table EnumTable[T]) NewRecord() EnumRecord[T] {
+	return EnumRecord[T]{T(0)}
 }
 
 // Returns an array of each valid value of the composed enum type.

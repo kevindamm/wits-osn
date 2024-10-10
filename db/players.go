@@ -38,6 +38,10 @@ type PlayerRecord struct {
 	osn.Player
 }
 
+func NewPlayerRecord() *PlayerRecord {
+	return &PlayerRecord{osn.Player{}}
+}
+
 func (player *PlayerRecord) Columns() []string {
 	return []string{
 		"id",
@@ -109,6 +113,8 @@ func MakePlayersTable(sqldb *sql.DB) MutableTable[*PlayerRecord] {
 		mutableBase: mutableBase[*PlayerRecord]{tableBase[*PlayerRecord]{
 			sqldb:   sqldb,
 			name:    "players",
+			zero:    NewPlayerRecord(),
+			new:     NewPlayerRecord,
 			Primary: "id",
 			NameCol: "name"}},
 		cachedPlayers: make(map[int64]*osn.Player)}
@@ -135,6 +141,8 @@ type StandingsRecord struct {
 	Until int64
 	osn.PlayerStanding
 }
+
+func NewStandingsRecord() *StandingsRecord { return &StandingsRecord{} }
 
 func (*StandingsRecord) Columns() []string {
 	return []string{
@@ -247,26 +255,33 @@ func MakeStandingsTable(sqldb *sql.DB) MutableTable[*StandingsRecord] {
 	return tableStandings{
 		mutableBase[*StandingsRecord]{tableBase[*StandingsRecord]{
 			sqldb: sqldb,
-			name:  "standings"}},
+			name:  "standings",
+			zero:  NewStandingsRecord(),
+			new:   NewStandingsRecord,
+		}},
 		make(map[int64]osn.PlayerStanding)}
 }
 
 func (tableStandings) SqlCreate() string {
 	return `CREATE TABLE "standings" (
     -- rowid INTEGER PRIMARY KEY,
-    "after_role" INTEGER NOT NULL UNIQUE,
-    "until_role" INTEGER,
+		"role_id" INTEGER NOT NULL UNIQUE,
+    "after" INTEGER NOT NULL UNIQUE,
+    "until" INTEGER,
 
     "player_league" INTEGER NOT NULL,
     "player_rank"   INTEGER NOT NULL,
     "player_points" INTEGER DEFAULT 0,
     "player_delta"  INTEGER DEFAULT 0,
 
-    FOREIGN KEY (after)
+		FOREIGN KEY (role_id)
       REFERENCES roles (rowid)
       ON DELETE CASCADE ON UPDATE NO ACTION,
+    FOREIGN KEY (after)
+      REFERENCES standings (rowid)
+      ON DELETE CASCADE ON UPDATE NO ACTION,
     FOREIGN KEY (until)
-      REFERENCES roles (rowid)
+      REFERENCES standings (rowid)
       ON DELETE CASCADE ON UPDATE NO ACTION,
     FOREIGN KEY (player_league)
       REFERENCES leagues (league_id)

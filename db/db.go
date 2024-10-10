@@ -24,7 +24,6 @@ package db
 
 import (
 	"database/sql"
-	"errors"
 	"log"
 	"strings"
 
@@ -36,7 +35,8 @@ import (
 //
 // DB includes match metadata, map identities, player history and replay index.
 type OsnDB interface {
-	Close() // Closes the database, including open rows and prepared statements.
+	MustCreateAndPopulateTables() // Create tables or die trying.
+	Close()                       // Closes the database and attached resources.
 
 	MapByID(id uint8) (osn.LegacyMap, error)
 	MapByName(name string) (osn.LegacyMap, error)
@@ -44,6 +44,8 @@ type OsnDB interface {
 	Players() MutableTable[*PlayerRecord]
 	Matches() MutableTable[*LegacyMatchRecord]
 	Standings() MutableTable[*StandingsRecord]
+
+	UpdateMatchStatus(osn.GameID, osn.FetchStatus) error
 }
 
 // Opens a Sqlite db at indicated path and prepares queries.
@@ -108,7 +110,7 @@ func open_database(filepath string) (*osndb, error) {
 }
 
 func (db *osndb) Close() {
-	// TODO close open statements & rows, cancel any pending contexts
+	// TODO: Perhaps track all open requests via [Context] and cancel them too.
 	db.sqldb.Close()
 }
 
@@ -132,39 +134,35 @@ func (db *osndb) Players() MutableTable[*PlayerRecord]      { return db.players 
 func (db *osndb) Matches() MutableTable[*LegacyMatchRecord] { return db.matches }
 func (db *osndb) Standings() MutableTable[*StandingsRecord] { return db.standings }
 
+func (db *osndb) UpdateMatchStatus(matchID osn.GameID, status osn.FetchStatus) error {
+	// TODO
+	return nil
+}
+
 // Only needs to be called once at database setup.  Also closes the database.
 // Will LOG(FATAL) an error if creation or initialization fail, with SQL error.
-func CreateTablesAndClose(db_path string) error {
-	witsdb, err := open_database(db_path)
-	if err != nil {
-		return errors.New("could not open WitsDB database")
-	}
-	// By closing the connection we also auto-close any transactions,
-	// as a defense against any
-	defer witsdb.Close()
-
+func (db *osndb) MustCreateAndPopulateTables() {
 	for _, table := range []TableSql{
-		witsdb.status,
-		witsdb.leagues,
-		witsdb.races,
-		witsdb.maps,
-		witsdb.players,
-		witsdb.matches,
-		witsdb.roles,
-		witsdb.standings,
+		db.status,
+		db.leagues,
+		db.races,
+		db.maps,
+		db.players,
+		db.matches,
+		db.roles,
+		db.standings,
 	} {
-		log.Println("creating table '" + table.Name() + "'")
-		must_execsql(witsdb.sqldb, table.SqlCreate())
+		createsql := table.SqlCreate()
+		log.Println(createsql)
+		must_execsql(db.sqldb, createsql)
 
 		initsql := table.SqlInit()
 		if initsql != "" {
-			log.Println("populating table '" + table.Name() + "'")
+			log.Println(initsql)
 			statements := strings.Split(initsql, ";")
 			for _, sql := range statements {
-				must_execsql(witsdb.sqldb, sql)
+				must_execsql(db.sqldb, sql)
 			}
 		}
 	}
-
-	return nil
 }
