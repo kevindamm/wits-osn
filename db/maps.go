@@ -25,7 +25,6 @@ package db
 import (
 	"database/sql"
 	"database/sql/driver"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -41,36 +40,36 @@ func NewMapRecord() *LegacyMapRecord {
 }
 
 func (LegacyMapRecord) Columns() []string {
-	return []string{"map_id", "map_name", "player_count", "filename"}
+	return []string{"id", "name", "shortname", "role_count"}
 }
 
 func (record LegacyMapRecord) Values() ([]any, error) {
 	return []any{
 		record.MapID,
 		record.Name,
-		record.PlayerCount,
-		record.Filename,
+		record.Shortname,
+		record.RoleCount,
 	}, nil
 }
 
 func (record LegacyMapRecord) NamedValues() ([]driver.NamedValue, error) {
 	return []driver.NamedValue{
 		{
-			Name:    "map_id",
+			Name:    "id",
 			Ordinal: 0,
 			Value:   record.MapID},
 		{
-			Name:    "map_name",
+			Name:    "name",
 			Ordinal: 1,
 			Value:   record.Name},
 		{
-			Name:    "player_count",
+			Name:    "shortname",
 			Ordinal: 2,
-			Value:   record.PlayerCount},
+			Value:   record.Shortname},
 		{
-			Name:    "details",
+			Name:    "role_count",
 			Ordinal: 3,
-			Value:   record.Filename},
+			Value:   record.RoleCount},
 	}, nil
 }
 
@@ -84,28 +83,27 @@ func (record *LegacyMapRecord) ScanValues(values ...driver.Value) error {
 	if !ok {
 		return fmt.Errorf("LegacyMap.Name value %v not string", values[1])
 	}
-	record.PlayerCount, ok = values[2].(int)
+	record.Shortname, ok = values[2].(string)
 	if !ok {
-		return fmt.Errorf("LegacyMap.PlayerCount value %v not int", values[2])
+		return fmt.Errorf("LegacyMap.Shortname value %v not []byte", values[3])
 	}
-	bytes, ok := values[3].([]byte)
+	record.RoleCount, ok = values[3].(int)
 	if !ok {
-		return fmt.Errorf("LegacyMap.Details value %v not []byte", values[3])
+		return fmt.Errorf("LegacyMap.RoleCount value %v not int", values[2])
 	}
-	return json.Unmarshal(bytes, &record.LegacyMapDetails)
+	return nil
 }
 
 func (record *LegacyMapRecord) ScanRow(row *sql.Row) error {
-	return row.Scan(&record.MapID, &record.Name, &record.PlayerCount, &record.Filename)
+	return row.Scan(&record.MapID, &record.Name, &record.Shortname, &record.RoleCount)
 }
 
 // This is provided for completeness but it has a flaw in that the details are
 // not recoverable.  However, at present this method is only called from the
 // `SELECT * FROM maps;` path, so it actually works out to get an abbreviation.
 func (record *LegacyMapRecord) Scannables() []any {
-	bytes := "{}"
 	return []any{
-		&record.MapID, &record.Name, &record.PlayerCount, &bytes,
+		&record.MapID, &record.Name, &record.RoleCount, &record.Shortname,
 	}
 }
 
@@ -121,52 +119,47 @@ func MakeMapsTable(sqldb *sql.DB) Table[*LegacyMapRecord] {
 			name:    "maps",
 			zero:    NewMapRecord(),
 			new:     NewMapRecord,
-			Primary: "map_id",
-			NameCol: "map_name"},
+			Primary: "id",
+			NameCol: "shortname"},
 		cachedMaps: make(map[string]osn.LegacyMap)}
 }
 
 func (table tableMaps) SqlCreate() string {
 	return fmt.Sprintf(`CREATE TABLE "%s" (
-      "map_id"        INTEGER PRIMARY KEY,
-      "map_name"      VARCHAR(127) NOT NULL,
-      "player_count"  INTEGER
-			  CHECK(player_count == 2 OR player_count == 4 OR player_count == 0),
-
-			-- Represents the following details in JSON-encoded bytes.
-			"filename"      TEXT -- see LegacyMapDetails
+      "id"          INTEGER PRIMARY KEY,
+      "name"        TEXT NOT NULL,
+			"shortname"   VARCHAR(127) UNIQUE,
+      "role_count"  INTEGER
+			  CHECK(role_count == 2 OR role_count == 4 OR role_count == 0)
     ) WITHOUT ROWID;`, table.name)
 }
 
 func (table tableMaps) SqlInit() string {
 	return strings.Join([]string{
-		fmt.Sprintf(`CREATE UNIQUE INDEX map_names ON %s (map_name);`,
-			table.name),
-
 		fmt.Sprintf(`INSERT INTO %s VALUES
-	    (0, "MAP_UNKNOWN", NULL, "")`, table.name),
+	    (0, "UNKNOWN", "", 0)`, table.name),
 
 		fmt.Sprintf(`INSERT INTO %s
-      (map_id, map_name, player_count, filename)
+      (id, name, role_count, shortname)
     VALUES
-      (1,      "Machination",       4, "machination.json"),
-      (2,      "Foundry (v1)",      0, ""),
-      (3,      "Foundry",           2, "foundry.json"),
-			(4,      "Glitch",            2, "glitch.json"),
-			(5,      "Candy Core Mine",   4, "candy-core-mine.json"),
-			(6,      "Sweetie Plains",    2, "sweetie-plains.json"),
-			(7,      "Peek-a-boo",        2, "peekaboo.json"),
-			(8,      "Blitz Beach",       4, "blitz-beach.json"),
-			(9,      "Long Nine",         2, "long-nine.json"),
-			(10,     "Sharkfood Island",  2, "sharkfood-island.json"),
-			(11,     "Acrospire",         4, "acrospire.json"),
-			(12,     "Thorn Gulley",      2, "thorn-gulley.json"),
-			(13,     "Reaper",            2, "reaper.json"),
-			(14,     "Skull Duggery",     2, "skull-duggery.json"),
-			(15,     "War Garden",        2, "war-garden.json"),
-			(16,     "Sweet Tooth",       2, "sweet-tooth.json"),
-			(17,     "Sugar Rock",        4, "sugar-rock.json"),
-			(18,     "Mechanism",         4, "mechanism.json")`,
+      (1,      "Machination",       4, "machination"),
+      (2,      "Foundry (v1)",      0, "foundry-deprecated"),
+      (3,      "Foundry",           2, "foundry"),
+			(4,      "Glitch",            2, "glitch"),
+			(5,      "Candy Core Mine",   4, "candy-core-mine"),
+			(6,      "Sweetie Plains",    2, "sweetie-plains"),
+			(7,      "Peek-a-boo",        2, "peekaboo"),
+			(8,      "Blitz Beach",       4, "blitz-beach"),
+			(9,      "Long Nine",         2, "long-nine"),
+			(10,     "Sharkfood Island",  2, "sharkfood-island"),
+			(11,     "Acrospire",         4, "acrospire"),
+			(12,     "Thorn Gulley",      2, "thorn-gulley"),
+			(13,     "Reaper",            2, "reaper"),
+			(14,     "Skull Duggery",     2, "skull-duggery"),
+			(15,     "War Garden",        2, "war-garden"),
+			(16,     "Sweet Tooth",       2, "sweet-tooth"),
+			(17,     "Sugar Rock",        4, "sugar-rock"),
+			(18,     "Mechanism",         4, "mechanism")`,
 			table.name),
 	}, ";\n")
 }

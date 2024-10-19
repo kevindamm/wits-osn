@@ -39,7 +39,7 @@ func TestMapsTable(t *testing.T) {
 		t.Error("retrieved incorrect map for ID 1")
 	}
 
-	mapobj, err = osndb.MapByName("Foundry")
+	mapobj, err = osndb.MapByName("foundry")
 	if err != nil {
 		t.Errorf("could not find map ID 3 (Foundry): %s", err)
 	}
