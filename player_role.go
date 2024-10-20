@@ -39,3 +39,21 @@ type PlayerRole struct {
 	RankBefore PlayerStanding `json:"rank_prev" orm:"--from fk(standings.until)"`
 	RankAfter  PlayerStanding `json:"rank_next,omitempty" orm:"--from fk(standings.after)"`
 }
+
+type BaseHealth uint
+
+type OsnRoleSettings struct {
+	PlayerID   int64  `json:"id"`
+	GCID       string `json:"gcID"`
+	PlayerName string `json:"name"`
+
+	ActionPoints uint `json:"actionPoints"`
+
+	Team     uint         `json:"team"`
+	Color    uint         `json:"color"`
+	UnitRace UnitRaceEnum `json:"race"`
+
+	BaseTheme   uint    `json:"basePref,omitempty"`
+	Invited     Boolish `json:"isInvited,omitempty"`
+	Placeholder Boolish `json:"isPlaceHolder,omitempty"`
+}

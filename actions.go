@@ -22,7 +22,12 @@
 
 package osn
 
-type PlayerAction interface {
+type OsnPlayerTurn struct {
+	Actions []OsnPlayerAction
+	State   OsnGameState `json:"state"`
+}
+
+type OsnPlayerAction interface {
 	Name() string
 	AsDict() map[string]interface{}
 }

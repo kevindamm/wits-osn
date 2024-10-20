@@ -38,7 +38,7 @@ type LegacyMatch struct {
 	OsnIndex    int       `json:"id,omitempty"`
 	Competitive bool      `json:"competitive"`
 	Season      int       `json:"season"`
-	StartTime   time.Time `json:"created"`
+	CreatedTime time.Time `json:"created"`
 	MapID       int       `json:"mapid"`
 	TurnCount   int       `json:"turn_count"`
 
@@ -46,6 +46,13 @@ type LegacyMatch struct {
 	FetchStatus FetchStatus `json:"-"`
 
 	Players []PlayerRole `json:"players,omitempty"`
+}
+
+type GameOverData struct {
+	Competitive Boolish           `json:"isLeagueMatch"`
+	Online      Boolish           `json:"-"`
+	Winners     []OsnPlayerUpdate `json:"winners"`
+	Losers      []OsnPlayerUpdate `json:"losers"`
 }
 
 const UNKNOWN_MATCH_ID = GameID("")

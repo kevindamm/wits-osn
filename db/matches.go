@@ -49,8 +49,11 @@ func MakeMatchRecord(match osn.LegacyMatch) *LegacyMatchRecord {
 func (*LegacyMatchRecord) Columns() []string {
 	return []string{
 		"rowid",
-		"match_hash", "competitive", "season", "start_time",
-		"map_id", "turn_count", "version", "fetch_status",
+		"match_hash",
+		"competitive", "season", "created_ts",
+		"turn_count",
+		"version",
+		"fetch_status",
 	}
 }
 
@@ -60,7 +63,7 @@ func (record *LegacyMatchRecord) Values() ([]any, error) {
 		record.MatchHash,
 		record.Competitive,
 		record.Season,
-		record.StartTime,
+		record.CreatedTime,
 		record.MapID,
 		record.TurnCount,
 		record.Version,
@@ -88,7 +91,7 @@ func (record *LegacyMatchRecord) NamedValues() ([]driver.NamedValue, error) {
 		{
 			Name:    "start_time",
 			Ordinal: 4,
-			Value:   record.StartTime},
+			Value:   record.CreatedTime},
 		{
 			Name:    "map_id",
 			Ordinal: 5,
@@ -127,7 +130,7 @@ func (record *LegacyMatchRecord) ScanValues(values ...driver.Value) error {
 	if !ok {
 		return fmt.Errorf("LegacyMatch.Season value %v not int", values[3])
 	}
-	record.StartTime, ok = values[4].(time.Time)
+	record.CreatedTime, ok = values[4].(time.Time)
 	if !ok {
 		return fmt.Errorf("LegacyMatch.StartTime value %v not time.Time", values[4])
 	}
@@ -156,7 +159,7 @@ func (record *LegacyMatchRecord) ScanRow(row *sql.Row) error {
 		&record.MatchHash,
 		&record.Competitive,
 		&record.Season,
-		&record.StartTime,
+		&record.CreatedTime,
 		&record.MapID,
 		&record.TurnCount,
 		&record.Version,
@@ -170,7 +173,7 @@ func (record *LegacyMatchRecord) Scannables() []any {
 		&record.MatchHash,
 		&record.Competitive,
 		&record.Season,
-		&record.StartTime,
+		&record.CreatedTime,
 		&record.MapID,
 		&record.TurnCount,
 		&record.Version,
@@ -204,7 +207,7 @@ func (table tableMatches) SqlCreate() string {
     "match_hash"    TEXT NOT NULL UNIQUE,
     "competitive"   BOOLEAN,    -- league or friendly
     "season"        INTEGER,    -- seasons are of variable duration
-    "start_time"    TIMESTAMP,  -- time at creation, UTC
+    "created_ts"    TIMESTAMP,  -- time at creation, UTC
 
     "map_id"        INTEGER,    -- MapEnum
     "turn_count"    INTEGER,    -- number of turns (= one ply) for the match

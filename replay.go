@@ -30,11 +30,46 @@ import (
 // Contains both the metadata (as LegacyMatch) and player turns (as ReplayData).
 type LegacyMatchWithReplay struct {
 	LegacyMatch
-	ReplayData
+	OsnGameState
+
+	Terminal GameOverData `json:"gameOverData,omitempty"`
+	Replay   OsnReplay    `json:"replay"`
 }
 
-// TODO specify this type
-type ReplayData map[string]any
+type OsnReplay []OsnReplayData
+
+// ReplayData is a sequence of player turns, each composed of spawns & actions.
+//
+// The player turn is composed of a partially-ordered sequence of actions, the
+// actions themselves are polymorphic under the interface type OsnPlayerAction.
+type OsnReplayData struct {
+	Turns []OsnPlayerTurn
+}
+
+type OsnGameState struct {
+	CapturedTiles []TileState `json:"captureTileStates"`
+	CurrentPawnID int         `json:"currentPawnID"`
+	CurrentPlayer PlayerIndex `json:"currentPlayer"`
+
+	Base0_HP BaseHealth `json:"hp_base0"`
+	Base1_HP BaseHealth `json:"hp_base1"`
+	Outcome  GameStatus `json:"outcome,omitempty"`
+
+	MapName  string          `json:"mapName"`
+	MapTheme string          `json:"mapTheme"`
+	Settings OsnRoleSettings `json:"settings"`
+
+	TurnCount  int          `json:"turnCount,omitempty"`
+	Units      []UnitStatus `json:"units"`
+	UsedSpawns []UsedSpawn  `json:"usedSpawns,omitempty"`
+}
+
+type GameStatus int
+
+type UsedSpawn struct {
+	SpawnX int `json:"ix"`
+	SpawnY int `json:"iy"`
+}
 
 // This is the format as returned by the web service for a single game replay.
 //

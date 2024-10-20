@@ -22,7 +22,9 @@
 
 package osn
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // An ELO-like measurement [points], and the player's league + standings status.
 type PlayerStanding struct {
@@ -48,4 +50,25 @@ func (ranked PlayerStanding) PointsBefore() uint16 {
 
 func UnknownStanding() PlayerStanding {
 	return PlayerStanding{}
+}
+
+// Matches the data layout of an OSN player update (from game over data).
+type OsnPlayerUpdate struct {
+	BaseHealth int             `json:"baseHealth"`
+	Color      PlayerColorEnum `json:"color"`
+	GCID       string          `json:"gcID"`
+	Delta      int             `json:"leaguePointsDelta"`
+	PlayerName string          `json:"name"`
+	Owner      int             `json:"owner"`
+	Race       int             `json:"race"`
+	Team       int             `json:"team"`
+
+	NewLeague     LeagueEnum `json:"newLeague"`
+	NewLeagueRank LeagueRank `json:"newLeagueRank"`
+	OldLeague     LeagueEnum `json:"oldLeague"`
+	OldLeagueRank LeagueRank `json:"oldLeagueRank"`
+
+	RankDirection int     `json:"rankDirection"`
+	Demoted       Boolish `json:"wasDemoted"`
+	Promoted      Boolish `json:"wasPromoted"`
 }
